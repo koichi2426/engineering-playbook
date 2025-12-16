@@ -91,9 +91,16 @@ CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 src/
 ├─ domain/               # 1. ドメイン層（純粋なビジネスルール）
-│  ├─ entities/          # エンティティ（クラスを実装）+ リポジトリIF: user.py, agent.py など
-│  ├─ value_objects/     # 値オブジェクト（クラスを実装）: email.py, id.py など
-│  └─ services/          # ドメインサービス（インターフェース）
+│  ├─ entities/          # エンティティ（抽象基底クラス）+ リポジトリIF（ABC）
+│  │  ├─ user.py         # User エンティティ（抽象） + UserRepository インターフェース
+│  │  └─ agent.py        # Agent エンティティ（抽象） + AgentRepository インターフェース
+│  ├─ value_objects/     # 値オブジェクト（抽象基底クラス/Protocol）
+│  │  ├─ id.py           # ID 値オブジェクト（抽象Protocol）
+│  │  ├─ email.py        # Email 値オブジェクト（抽象Protocol）
+│  │  └─ file_data.py    # FileStream 値オブジェクト（抽象Protocol）
+│  └─ domain_services/   # ドメインサービスIF（Protocol/ABC）
+│     ├─ auth_domain_service.py           # 認証サービスIF
+│     └─ file_storage_domain_service.py   # ファイルストレージサービスIF
 ├─ usecase/              # 2. ユースケース層（操作フロー）
 │  ├─ auth_login.py
 │  └─ create_agent.py    # ほか機能ごとに追加
@@ -101,14 +108,27 @@ src/
 │  ├─ controller/        # HTTP → Usecase 入力
 │  └─ presenter/         # Usecase 出力 → HTTP レスポンス
 ├─ infrastructure/       # 4. インフラ層（具体実装／外部技術）
+│  ├─ domain_object_impls/   # ドメインオブジェクトの具体実装
+│  │  ├─ entity_impls/           # エンティティの具象クラス
+│  │  │  ├─ user_impl.py         # User エンティティの実装
+│  │  │  └─ agent_impl.py        # Agent エンティティの実装
+│  │  ├─ value_object_impls/     # 値オブジェクトの具象クラス
+│  │  │  ├─ id_impl.py           # ID 値オブジェクトの実装
+│  │  │  ├─ email_impl.py        # Email 値オブジェクトの実装
+│  │  │  └─ file_data_impl.py    # FileStream 値オブジェクトの実装
+│  │  └─ domain_service_impls/   # ドメインサービスの具体実装
+│  │     ├─ auth_domain_service_impl.py          # AuthDomainService の実装
+│  │     └─ file_storage_domain_service_impl.py  # FileStorageDomainService の実装
 │  ├─ database/          # DBセッション, Engine, 各種DB技術（SQL/NoSQL）
 │  │  ├─ mysql/          # MySQLリポジトリ実装（各フォルダ直下に必ず config.py）
+│  │  │  ├─ config.py              # MySQL接続設定
+│  │  │  ├─ agent_repository.py    # AgentRepository の実装
+│  │  │  └─ user_repository.py     # UserRepository の実装
 │  │  ├─ postgresql/     # PostgreSQLリポジトリ実装（例、config.py 必須）
 │  │  ├─ sqlite/         # SQLiteリポジトリ実装（例、config.py 必須）
 │  │  ├─ mongodb/        # MongoDBリポジトリ実装（例、config.py 必須）
 │  │  ├─ dynamodb/       # DynamoDB実装（例、config.py 必須）
 │  │  └─ redis/          # Redisキャッシュ実装（例、config.py 必須）
-│  ├─ services/          # 外部連携・ドメインサービス等の具体実装
 │  ├─ router/            # FastAPIルーティング: fastapi.py（簡易DIもここで）
 │  ├─ storage/           # 外部ストレージクライアント（各フォルダに config.py 推奨）
 │  │  ├─ s3/             # AWS S3クライアント実装（config.py 推奨）
@@ -118,11 +138,23 @@ src/
 └─ main.py               # アプリケーション起動ファイル / Entrypoint
 ```
 
+> **注意: エンティティ・値オブジェクトの実装配置について**
+> 
+> 通常、エンティティと値オブジェクトは`domain/entities/`や`domain/value_objects/`で具象クラス（dataclass等）として直接実装できます。
+> しかし、`file_data.py`の`FileStream`のように、フレームワーク固有の型（FastAPIの`UploadFile`など）から独立させるため抽象的な定義（Protocol/ABC）としてしか表現できないケースがあります。
+> 
+> このような場合、抽象定義はドメイン層に配置し、その具体実装を`infrastructure/domain_object_impls/entity_impls/`や`infrastructure/domain_object_impls/value_object_impls/`に配置します。
+> 
+> 多くのプロジェクトでは、エンティティ・値オブジェクトは直接ドメイン層で実装できるため、`infrastructure/domain_object_impls/`配下のフォルダは空になることもあります。必要に応じて使用してください。
+
 ### 3. 各ディレクトリの責務 (src/)
 
 * `src/domain/` (ドメイン層)
     - 責務: 純粋なビジネスルール
-    - 内容: `entities/`(エンティティ+リポジトリIF), `value_objects/`, `services/`(ロジックIF)
+    - 内容: 
+      - `entities/`: エンティティクラス（具象クラス/抽象基底クラス）とリポジトリインターフェース（ABC）を同じファイルに配置 (例: `agent.py`)
+      - `value_objects/`: 値オブジェクトクラス（具象クラス/抽象基底クラス） (例: `id.py`, `email.py`, `file_data.py`)
+      - `domain_services/`: ドメインサービスのインターフェース（Protocol/ABC） (例: `auth_domain_service.py`)
 * `src/usecase/` (ユースケース層)
     - 責務: アプリケーション固有のロジック
     - 内容: 具体的な操作フローを実装。`domain`層のインターフェースにのみ依存
@@ -131,7 +163,11 @@ src/
     - 内容: `controller/`と`presenter/`
 * `src/infrastructure/` (インフラ層)
     - 責務: 外部技術と`domain`インターフェースの具体実装
-    - 内容: `database/*/`（各DB技術、各フォルダに`config.py`必須）, `services/`, `router/`
+    - 内容: 
+      - `domain_object_impls/`: ドメインオブジェクトの具体実装（`entity_impls/`, `value_object_impls/`, `domain_service_impls/`）
+      - `database/*/`: 各DB技術のリポジトリ実装（各フォルダに`config.py`必須）
+      - `router/`: FastAPIルーティング
+      - `storage/`: ファイルストレージクライアント
 * `src/main.py`
     - 責務: アプリケーションの起動
     - 内容: `infrastructure/router/fastapi.py`で定義したFastAPIアプリを起動
@@ -311,11 +347,11 @@ def NewAgent(
 - DB固有の最適化・トランザクション管理の高度化は必要最小限。例外は具体的な要件がある場合のみ。
 
 2.  **ドメインサービス・インターフェースの定義:**
-    * エンティティや値オブジェクトに当てはまらないビジネスロジックは、`src/domain/services/`にドメインサービスとして定義します。
+    * エンティティや値オブジェクトに当てはまらないビジネスロジックは、`src/domain/domain_services/`にドメインサービスとして定義します。
     * 例: 複数のエンティティにまたがる処理、外部との連携ロジックなど。
     * 命名規則: `[ドメインサービスの名前]_service.py`（例: `auth_service.py`, `notification_service.py`）
 
-**コード例 (ドメインサービス: `domain/services/deployment_test_service.py`):**
+**コード例 (ドメインサービス: `domain/domain_services/deployment_test_service.py`):**
 ```python
 import abc
 from typing import Protocol
@@ -350,7 +386,7 @@ class DeploymentTestDomainService(Protocol):
         ...
 ```
 
-**コード例 (ドメインサービス: `domain/services/file_storage_domain_service.py`):**
+**コード例 (ドメインサービス: `domain/domain_services/file_storage_domain_service.py`):**
 
 > **注意:** このドメインサービスは **APIでファイルデータ（アップロード/ダウンロード）を扱う場合のみ** 必要です。ファイル処理が不要なAPIでは定義しません。
 
@@ -409,7 +445,7 @@ class FileStorageDomainService(Protocol):
 
 **依存関係の原則:**  
 ユースケース層は **ドメイン層のオブジェクトのみ** を使用してコードを書きます。
-- 使用可能: `domain/entities/`, `domain/value_objects/`, `domain/services/`（インターフェース）, `domain/repositories/`（インターフェース）
+- 使用可能: `domain/entities/`, `domain/value_objects/`, `domain/domain_services/`（インターフェース）, `domain/repositories/`（インターフェース）
 - 使用禁止: `infrastructure`, `adapter`, 外部ライブラリ（DB、API クライアントなど）
 
 注意（Usecaseの実装範囲）:
@@ -762,14 +798,14 @@ class MySQLAgentRepository(AgentRepository):
 ```
 
 2.  **ドメインサービスの実装:**
-      * `src/infrastructure/services/auth_service_impl.py`を作成します。
-      * `domain/services/`で定義したドメインサービスインターフェースを実装します。
+      * `src/infrastructure/domain_object_impls/domain_service_impls/auth_service_impl.py`を作成します。
+      * `domain/domain_services/`で定義したドメインサービスインターフェースを実装します。
       * 外部API、認証ライブラリなど、具体的な技術を使用できます。
 
-**コード例 (ドメインサービス実装: `infrastructure/services/auth_service_impl.py`):**
+**コード例 (ドメインサービス実装: `infrastructure/domain_object_impls/domain_service_impls/auth_service_impl.py`):**
 
 ```python
-from domain.services.auth_service import AuthDomainService
+from domain.domain_services.auth_service import AuthDomainService
 from domain.entities.user import User
 from domain.value_objects.id import ID
 import jwt  # 外部ライブラリの使用OK
@@ -788,13 +824,13 @@ class AuthServiceImpl(AuthDomainService):
 ```
 
 3.  **ファイルストレージサービスの実装（APIでファイルデータを扱う場合）:**
-      * APIでファイルアップロード/ダウンロードを扱う場合、`src/infrastructure/services/file_storage_domain_service_impl.py`を作成します。
-      * `domain/services/file_storage_domain_service.py`で定義したインターフェースを実装します。
+      * APIでファイルアップロード/ダウンロードを扱う場合、`src/infrastructure/domain_object_impls/domain_service_impls/file_storage_domain_service_impl.py`を作成します。
+      * `domain/domain_services/file_storage_domain_service.py`で定義したインターフェースを実装します。
       * 実際のストレージクライアント（`infrastructure/storage/s3_client.py`など）を使用してファイルを保存します。
 
-**コード例 (ファイルストレージサービス実装: `infrastructure/services/file_storage_domain_service_impl.py`):**
+**コード例 (ファイルストレージサービス実装: `infrastructure/domain_object_impls/domain_service_impls/file_storage_domain_service_impl.py`):**
 ```python
-from domain.services.file_storage_domain_service import FileStorageDomainService
+from domain.domain_services.file_storage_domain_service import FileStorageDomainService
 from domain.value_objects.file_data import FileStream
 from infrastructure.storage.s3_client import S3Client  # 具体的なストレージクライアント
 
@@ -930,7 +966,7 @@ from fastapi.responses import JSONResponse
 # 設定と依存の初期化
 from infrastructure.database.mysql.config import NewMySQLConfigFromEnv
 from infrastructure.database.mysql.agent_repository import MySQLAgentRepository
-from infrastructure.services.auth_service_impl import AuthServiceImpl
+from infrastructure.domain_object_impls.domain_service_impls.auth_service_impl import AuthServiceImpl
 
 from adapter.controller.create_agent_controller import CreateAgentController
 from adapter.presenter.create_agent_presenter import new_create_agent_presenter
@@ -994,13 +1030,13 @@ from infrastructure.database.mysql.deployment_repository import MySQLDeploymentR
 from infrastructure.database.mysql.methods_repository import MySQLMethodsRepository
 
 # --- Domain Services Implementations ---
-from infrastructure.services.auth_domain_service_impl import AuthServiceImpl
-from infrastructure.services.file_storage_domain_service_impl import FileStorageDomainServiceImpl
-from infrastructure.services.job_queue_domain_service_impl import JobQueueDomainServiceImpl
-from infrastructure.services.system_time_domain_service_impl import SystemTimeDomainServiceImpl
-from infrastructure.services.get_image_stream_domain_service_impl import FileStreamDomainServiceImpl
-from infrastructure.services.job_method_finder_domain_service_impl import JobMethodFinderDomainServiceImpl
-from infrastructure.services.deployment_test_domain_service_impl import DeploymentTestDomainServiceImpl
+from infrastructure.domain_object_impls.domain_service_impls.auth_domain_service_impl import AuthServiceImpl
+from infrastructure.domain_object_impls.domain_service_impls.file_storage_domain_service_impl import FileStorageDomainServiceImpl
+from infrastructure.domain_object_impls.domain_service_impls.job_queue_domain_service_impl import JobQueueDomainServiceImpl
+from infrastructure.domain_object_impls.domain_service_impls.system_time_domain_service_impl import SystemTimeDomainServiceImpl
+from infrastructure.domain_object_impls.domain_service_impls.get_image_stream_domain_service_impl import FileStreamDomainServiceImpl
+from infrastructure.domain_object_impls.domain_service_impls.job_method_finder_domain_service_impl import JobMethodFinderDomainServiceImpl
+from infrastructure.domain_object_impls.domain_service_impls.deployment_test_domain_service_impl import DeploymentTestDomainServiceImpl
 
 # --- Controllers / Presenters / Usecases ---
 from adapter.controller.create_agent_controller import CreateAgentController
