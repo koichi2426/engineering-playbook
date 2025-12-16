@@ -2,6 +2,21 @@
 
 このドキュメントは、フォルダ構成（What/Where）と新規API追加の標準的な開発手順（How）を1つにまとめたものです。クリーンアーキテクチャの4層に基づき、配置場所と手順の両方をここで参照できます。
 
+## 目次
+
+- [プロジェクト構成 (概要)](#プロジェクト構成-概要)
+  - [フォルダ構成 (Root)](#1-フォルダ構成-root)
+  - [フォルダ構成 (src/)](#2-フォルダ構成-src)
+  - [各ディレクトリの責務](#3-各ディレクトリの責務-src)
+- [新規APIの追加手順](#新規apiの追加手順-ガイド)
+  - [実装前のチェック](#実装前のチェックai向け)
+  - [Step 1: ドメイン層](#step-1-ドメイン層-srcdomain)
+  - [Step 2: ユースケース層](#step-2-ユースケース層-srcusecase)
+  - [Step 3: インフラ層 (実装)](#step-3-インフラ層-srcinfrastructure---実装)
+  - [Step 4: アダプタ層](#step-4-アダプタ層-srcadapter---翻訳)
+  - [Step 5: インフラ層 (接続)](#step-5-インフラ層-srcinfrastructure---接続)
+  - [Step 6: 起動ファイル](#step-6-起動ファイル-srcmainpy)
+
 ---
 
 ## プロジェクト構成 (概要)
@@ -92,7 +107,11 @@ src/
 │  │  └─ redis/          # Redisキャッシュ実装（例、config.py 必須）
 │  ├─ services/          # 外部連携・ドメインサービス等の具体実装
 │  ├─ router/            # FastAPIルーティング: fastapi.py（簡易DIもここで）
-│  └─ storage/           # 外部ストレージクライアント
+│  ├─ storage/           # 外部ストレージクライアント（各フォルダに config.py 推奨）
+│  │  ├─ s3/             # AWS S3クライアント実装（config.py 推奨）
+│  │  ├─ gcs/            # Google Cloud Storageクライアント実装（例、config.py 推奨）
+│  │  ├─ azure_blob/     # Azure Blob Storageクライアント実装（例、config.py 推奨）
+│  │  └─ local/          # ローカルファイルシステム実装（開発用、config.py 推奨）
 └─ main.py               # アプリケーション起動ファイル / Entrypoint
 ```
 
@@ -137,7 +156,7 @@ src/
 ```python
 import abc
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import BinaryIO, Optional
 ```
 
 **ドメイン層内での相互参照:**  
@@ -177,6 +196,48 @@ class ID:
 
     def __str__(self) -> str:
         return str(self.value)
+```
+
+**コード例 (値オブジェクト: `domain/value_objects/file_data.py`):**
+
+> **注意:** この値オブジェクトは **APIでファイルデータ（アップロード/ダウンロード）を扱う場合のみ** 必要です。`file_storage_domain_service.py`と併せて定義します。
+
+```python
+import abc
+from typing import BinaryIO, Optional
+
+
+class FileStream(abc.ABC):
+    """
+    ファイルデータを抽象的に表現するドメイン層のインターフェース。
+    アップロード、ダウンロード、内部生成など様々な形式のファイルに対応します。
+    ユースケースはこの抽象型のみを参照し、FastAPIのUploadFileなどフレームワーク固有の型に依存しません。
+    """
+    @property
+    @abc.abstractmethod
+    def filename(self) -> str:
+        """元のファイル名またはファイル識別子"""
+        pass
+
+    @property
+    @abc.abstractmethod
+    def content_type(self) -> Optional[str]:
+        """ファイルのMIMEタイプ"""
+        pass
+
+    @property
+    @abc.abstractmethod
+    def file_stream(self) -> BinaryIO:
+        """ファイルの内容にアクセスするための標準的なバイナリストリーム"""
+        pass
+
+    @abc.abstractmethod
+    async def read(self) -> bytes:
+        """
+        ファイルの内容全体を非同期で読み込み、バイトデータとして返す。
+        （FastAPIの UploadFile.read() に対応）
+        """
+        pass
 ```
 
 **コード例 (エンティティとリポジトリ: `domain/entities/agent.py`):**
@@ -256,7 +317,7 @@ def NewAgent(
 import abc
 from typing import Protocol
 
-from domain.value_objects.file_data import UploadedFileStream 
+from domain.value_objects.file_data import FileStream
 from domain.value_objects.deployment_test_result import DeploymentTestResult 
 
     
@@ -269,7 +330,7 @@ class DeploymentTestDomainService(Protocol):
     @abc.abstractmethod
     async def run_batch_inference_test(
         self, 
-        test_file: UploadedFileStream,
+        test_file: FileStream,
         endpoint_url: str,
     ) -> DeploymentTestResult: 
         """
@@ -282,6 +343,53 @@ class DeploymentTestDomainService(Protocol):
             
         Returns:
             DeploymentTestResult: テスト実行の最終結果を含むV.O.。
+        """
+        ...
+```
+
+**コード例 (ドメインサービス: `domain/services/file_storage_domain_service.py`):**
+
+> **注意:** このドメインサービスは **APIでファイルデータ（アップロード/ダウンロード）を扱う場合のみ** 必要です。ファイル処理が不要なAPIでは定義しません。
+
+```python
+import abc
+from typing import Protocol
+
+from domain.value_objects.file_data import FileStream
+
+
+class FileStorageDomainService(Protocol):
+    """
+    ファイルストレージへの永続化を抽象化したドメインサービスインターフェース。
+    トレーニングファイルおよび訓練済みモデルを保存し、ワーカーがアクセス可能なパスを返す。
+    具体的なストレージ実装（S3、GCS、ローカルFS等）はインフラ層に委譲される。
+    """
+    
+    @abc.abstractmethod
+    def save_training_file(self, uploaded_file: FileStream, unique_id: str) -> str:
+        """
+        訓練データとしてアップロードされたファイルストリームを保存し、ワーカーがアクセスできるパスを返す。
+
+        Args:
+            uploaded_file: 抽象ファイルストリームオブジェクト。
+            unique_id: ファイル名の一意性を確保するためのID（例: Agent ID）。
+
+        Returns:
+            str: 永続化されたファイルの絶対パス。
+        """
+        ...
+        
+    @abc.abstractmethod
+    def save_training_model(self, model_artifact: FileStream, unique_id: str) -> str:
+        """
+        訓練済みモデルの成果物（アーティファクト）を保存し、デプロイワーカーがアクセスできるパスを返す。
+
+        Args:
+            model_artifact: 訓練済みモデルのデータストリームを持つ抽象オブジェクト。
+            unique_id: モデルを特定するための一意なID（例: Agent ID、または Agent ID + Version）。
+
+        Returns:
+            str: 永続化されたモデルファイルの絶対パス。
         """
         ...
 ```
@@ -676,8 +784,43 @@ class AuthServiceImpl(AuthDomainService):
         )
 ```
 
-3.  **その他の外部連携:**
-      * `src/infrastructure/storage/`に外部ストレージクライアント（S3、GCSなど）を実装します。
+3.  **ファイルストレージサービスの実装（APIでファイルデータを扱う場合）:**
+      * APIでファイルアップロード/ダウンロードを扱う場合、`src/infrastructure/services/file_storage_domain_service_impl.py`を作成します。
+      * `domain/services/file_storage_domain_service.py`で定義したインターフェースを実装します。
+      * 実際のストレージクライアント（`infrastructure/storage/s3_client.py`など）を使用してファイルを保存します。
+
+**コード例 (ファイルストレージサービス実装: `infrastructure/services/file_storage_domain_service_impl.py`):**
+```python
+from domain.services.file_storage_domain_service import FileStorageDomainService
+from domain.value_objects.file_data import FileStream
+from infrastructure.storage.s3_client import S3Client  # 具体的なストレージクライアント
+
+
+class FileStorageDomainServiceImpl(FileStorageDomainService):
+    def __init__(self, storage_client: S3Client, base_path: str = "training-data"):
+        self.storage_client = storage_client
+        self.base_path = base_path
+    
+    def save_training_file(self, uploaded_file: FileStream, unique_id: str) -> str:
+        # S3やGCSなどにファイルを保存し、パスを返す
+        object_key = f"{self.base_path}/{unique_id}/{uploaded_file.filename}"
+        self.storage_client.upload(object_key, uploaded_file.file_stream)
+        return f"s3://bucket-name/{object_key}"  # または絶対パス
+    
+    def save_training_model(self, model_artifact: FileStream, unique_id: str) -> str:
+        object_key = f"models/{unique_id}/{model_artifact.filename}"
+        self.storage_client.upload(object_key, model_artifact.file_stream)
+        return f"s3://bucket-name/{object_key}"
+
+
+def NewFileStorageDomainService() -> FileStorageDomainService:
+    """ファクトリ関数でストレージクライアントを初期化"""
+    s3_client = S3Client(bucket="your-bucket-name")  # 設定から読み込み
+    return FileStorageDomainServiceImpl(s3_client)
+```
+
+4.  **その他の外部連携:**
+      * `src/infrastructure/storage/`に外部ストレージクライアント（S3、GCSなど）の低レベル実装を配置します。
       * 必要に応じて、メール送信、通知サービスなどの実装もここに配置します。
 
 ### Step 4: アダプタ層 (src/adapter/) - 翻訳
