@@ -628,11 +628,71 @@ class AuthServiceImpl(AuthDomainService):
 1.  **コントローラーの作成:**
       * `src/adapter/controller/create_agent_controller.py`を作成します。
       * `CreateAgentController`クラスを定義します。
-      * コンストラクタで`CreateAgentUseCase`と`CreateAgentPresenter`を受け取ります。
-      * HTTPリクエスト（Pydanticモデル）を受け取り、ユースケースを呼び出します。
+      * コンストラクタで`CreateAgentUseCase`を受け取ります。
+      * HTTPリクエスト（Input DTO）を受け取り、ユースケースを呼び出し、ステータスコードとレスポンスを返します。
 2.  **プレゼンターの作成:**
       * `src/adapter/presenter/create_agent_presenter.py`を作成します。
-      * Pydanticモデルを使い、レスポンスのJSON形式を定義（`AgentResponse`など）し、ユースケースの戻り値（エンティティ）をJSONに変換するロジック（`output`メソッドなど）を提供します。
+      * `CreateAgentPresenter`インターフェースを実装し、エンティティを Output DTO に変換します。
+      * ファクトリ関数を定義してPresenterインスタンスを生成します。
+
+**コード例 (コントローラー: `adapter/controller/create_agent_controller.py`):**
+
+```python
+from typing import Dict, Union
+from usecase.create_agent import (
+    CreateAgentUseCase,
+    CreateAgentInput,
+    CreateAgentOutput,
+)
+
+
+class CreateAgentController:
+    def __init__(self, uc: CreateAgentUseCase):
+        self.uc = uc
+
+    def execute(
+        self, input_data: CreateAgentInput
+    ) -> Dict[str, Union[int, CreateAgentOutput, Dict[str, str]]]:
+        try:
+            output, err = self.uc.execute(input_data)
+            if err:
+                # トークン検証エラーやその他のユースケースエラー
+                return {"status": 401, "data": {"error": str(err)}}
+            
+            # 成功
+            return {"status": 201, "data": output}
+        except Exception as e:
+            # 予期せぬサーバーエラー
+            return {"status": 500, "data": {"error": f"An unexpected error occurred: {e}"}}
+```
+
+**コード例 (プレゼンター: `adapter/presenter/create_agent_presenter.py`):**
+
+```python
+from usecase.create_agent import CreateAgentPresenter, CreateAgentOutput
+from domain.entities.agent import Agent
+
+
+class CreateAgentPresenterImpl(CreateAgentPresenter):
+    def output(self, agent: Agent) -> CreateAgentOutput:
+        """
+        Agentドメインオブジェクトを CreateAgentOutput DTO に変換して返す。
+        """
+        return CreateAgentOutput(
+            id=agent.id.value,
+            user_id=agent.user_id.value,
+            owner=agent.owner,
+            name=agent.name,
+            description=agent.description,
+        )
+
+
+def new_create_agent_presenter() -> CreateAgentPresenter:
+    """
+    CreateAgentPresenterImpl のインスタンスを生成するファクトリ関数。
+    """
+    return CreateAgentPresenterImpl()
+```
 
 ### Step 5: インフラ層 (src/infrastructure/) - 接続
 
@@ -649,4 +709,63 @@ class AuthServiceImpl(AuthDomainService):
 
 ### Step 6: 起動ファイル (src/main.py)
 
-  * `src/main.py`が`src/infrastructure/router/fastapi.py`で定義された`app`をUvicornで起動することを確認します（通常、変更は不要）。
+**責務:** アプリケーション起動時に、FastAPIインスタンスを初期化し、全体を統合します。
+
+- FastAPIインスタンスを作成します。
+- CORSミドルウェアを設定し、フロントエンドからのアクセスを許可します。
+- Step 5で定義したルーターを組み込みます。
+- ヘルスチェックなどの基本エンドポイントを定義します。
+- `src/infrastructure/router/fastapi.py`で定義された`app`をUvicornで起動します。
+
+**コード例 (`main.py`):**
+
+```python
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from infrastructure.router.fastapi import router
+
+# FastAPIインスタンスを作成
+app = FastAPI(
+    title="Your API Title",
+    description="A FastAPI application description.",
+    version="0.1.0",
+)
+
+# フロントエンドからのアクセスを許可するためのCORS設定
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ルーターを組み込む
+app.include_router(router)
+
+
+@app.get("/")
+def read_root():
+    """
+    ルートエンドポイント
+    """
+    return {"message": "Hello from Backend!"}
+
+
+@app.get("/health")
+def health_check():
+    """
+    ヘルスチェック用エンドポイント
+    """
+    return {"status": "ok"}
+```
+
+**起動方法:**
+
+```bash
+uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+- `--reload`: ファイル変更時に自動リロード（開発環境用）
+- `--host 0.0.0.0`: すべてのインターフェースでリッスン
+- `--port 8000`: ポート8000で起動
