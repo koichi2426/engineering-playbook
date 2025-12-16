@@ -53,8 +53,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # アプリケーションのコードをコピー
 COPY . .
 
+# Pythonモジュール探索パスを設定（src配下を解決）
+ENV PYTHONPATH=/app/src
+
 # コンテナ起動時にAPIサーバーを実行（0.0.0.0を指定）
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
 補足:
@@ -134,7 +137,7 @@ src/
 ```python
 import abc
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Optional
 ```
 
 **ドメイン層内での相互参照:**  
@@ -150,7 +153,7 @@ from ..value_objects.method import Method
 class DeploymentMethods:
     id: ID
     deployment_id: ID
-    methods: List[Method] = field(default_factory=list)
+    methods: list[Method] = field(default_factory=list)
 ```
 
 1.  **エンティティ / 値オブジェクトの定義:**
@@ -333,7 +336,7 @@ from domain.value_objects.id import ID
 class CreateAgentUseCase(Protocol):
     def execute(
         self, input: "CreateAgentInput"
-    ) -> Tuple["CreateAgentOutput", Exception | None]:
+    ) -> tuple["CreateAgentOutput", Exception | None]:
         ...
 
 
@@ -386,7 +389,7 @@ class CreateAgentInteractor:
 
     def execute(
         self, input: CreateAgentInput
-    ) -> Tuple[CreateAgentOutput, Exception | None]:
+    ) -> tuple[CreateAgentOutput, Exception | None]:
         try:
             # トークンを検証してユーザー情報を取得
             user = self.auth_service.verify_token(input.token)
@@ -507,7 +510,7 @@ def NewMySQLConfigFromEnv() -> MySQLConfig:
 ```python
 import mysql.connector
 from mysql.connector import pooling
-from typing import Optional, List
+from typing import Optional
 from contextlib import contextmanager
 
 from domain.entities.agent import Agent, NewAgent, AgentRepository
@@ -609,7 +612,7 @@ class MySQLAgentRepository(AgentRepository):
         
         return self._map_row_to_agent(row)
 
-    def list_by_user_id(self, user_id: ID) -> List[Agent]:
+    def list_by_user_id(self, user_id: ID) -> list[Agent]:
         sql = "SELECT id, user_id, owner, name, description FROM agents WHERE user_id = %s ORDER BY id"
         with self._get_cursor() as cursor:
             cursor.execute(sql, (user_id.value,))
@@ -617,7 +620,7 @@ class MySQLAgentRepository(AgentRepository):
             
         return [self._map_row_to_agent(row) for row in rows if row]
 
-    def find_all(self) -> List[Agent]:
+    def find_all(self) -> list[Agent]:
         sql = "SELECT id, user_id, owner, name, description FROM agents ORDER BY id"
         with self._get_cursor() as cursor:
             cursor.execute(sql)
@@ -694,7 +697,7 @@ class AuthServiceImpl(AuthDomainService):
 **コード例 (コントローラー: `adapter/controller/create_agent_controller.py`):**
 
 ```python
-from typing import Dict, Union
+from typing import Union
 from usecase.create_agent import (
     CreateAgentUseCase,
     CreateAgentInput,
@@ -708,7 +711,7 @@ class CreateAgentController:
 
     def execute(
         self, input_data: CreateAgentInput
-    ) -> Dict[str, Union[int, CreateAgentOutput, Dict[str, str]]]:
+    ) -> dict[str, Union[int, CreateAgentOutput, dict[str, str]]]:
         try:
             output, err = self.uc.execute(input_data)
             if err:
@@ -767,6 +770,7 @@ def new_create_agent_presenter() -> CreateAgentPresenter:
 ```python
 from fastapi import APIRouter, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import JSONResponse
 
 # 設定と依存の初期化
 from infrastructure.database.mysql.config import NewMySQLConfigFromEnv
@@ -799,7 +803,7 @@ def create_agent(request: CreateAgentInput, credentials: HTTPAuthorizationCreden
     )
     response = controller.execute(input_data)
     # 共通レスポンス整形は別関数に切り出してもOK
-    return response
+    return JSONResponse(content=response["data"], status_code=response["status"])
 ```
 
 #### fastapi.py の進化ガイド（複数エンドポイント・共通ヘルパ・サービス集約）
@@ -816,7 +820,7 @@ def create_agent(request: CreateAgentInput, credentials: HTTPAuthorizationCreden
 スケルトン例（抜粋・要点のみ）：
 
 ```python
-from typing import Optional, Dict
+from typing import Optional
 from dataclasses import is_dataclass, asdict
 from datetime import datetime
 from fastapi import APIRouter, Depends, UploadFile, File, Path
@@ -870,7 +874,7 @@ ctx_timeout = 10.0
 async_http_client = httpx.AsyncClient(timeout=15.0)
 test_inference_service = DeploymentTestDomainServiceImpl(client=async_http_client)
 
-def handle_response(response_dict: Dict, success_code: int = 200):
+def handle_response(response_dict: dict, success_code: int = 200):
     status_code = response_dict.get("status", 500)
     data = response_dict.get("data")
     if isinstance(data, StreamingResponse):
