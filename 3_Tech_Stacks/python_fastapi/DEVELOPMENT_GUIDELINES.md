@@ -22,13 +22,46 @@
 ```
 backend/
 ├─ Dockerfile
-├─ docker-compose.yml
 ├─ .env.example
 ├─ requirements.txt
 ├─ alembic.ini
 ├─ alembic/              # DBマイグレーションスクリプト
 └─ src/                  # ★ すべてのアプリケーションコード
 ```
+
+#### Dockerfile（backend/Dockerfile 推奨内容）
+
+FastAPIアプリのコンテナ化に使用する`backend/Dockerfile`は次の内容を推奨します。
+
+```Dockerfile
+# Pythonの公式軽量イメージを使用
+FROM python:3.10-slim
+
+# 作業ディレクトリを設定
+WORKDIR /app
+
+# 環境変数を設定（UTF-8対応）
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# 依存ライブラリのリストをコピー
+COPY requirements.txt .
+
+# 依存ライブラリをインストール
+RUN pip install --no-cache-dir -r requirements.txt
+
+# アプリケーションのコードをコピー
+COPY . .
+
+# コンテナ起動時にAPIサーバーを実行（0.0.0.0を指定）
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+補足:
+- `requirements.txt`は`backend/`直下に配置します。
+- `main:app`は`backend/src/main.py`で定義されたFastAPIインスタンス`app`を参照します（`WORKDIR`が`/app`のため、`uvicorn`は`main`モジュールを解決します）。
+- ローカル開発では`--reload`オプションを使用することがありますが、本番コンテナでは省略します。
+ - YAMLの構成ファイル（例: docker-compose.yml）は本プロジェクトでは不要です。単一コンテナ起動を前提とします。
 
 ### 2. フォルダ構成 (src/)
 
