@@ -8,6 +8,13 @@
 
 この構成は、`2_Concepts/clean_architecture.md`で定義した4層の責務に基づいています。
 
+> 注意（AI実装向けガードライン）
+> - このドキュメントのコード例は「雛形」かつ「参照用」です。要求にない機能・抽象化・汎用化は一切追加しないでください。
+> - 実装は「最小限のスコープ」で行います。ルート・DTO・Presenter・Usecase・Repository・Serviceのうち、タスク達成に必要な部分だけを作成・編集します。
+> - 依存関係はレイヤ原則に厳密に従います（UsecaseはDomainのみ、InfrastructureやAdapterの具体実装へ直接依存しない）。
+> - 例の名称・構造は参考であり、プロジェクトの既存命名・配置に優先度があります。既存と矛盾する場合、既存に合わせます。
+> - 追加でユーティリティ、共通化、設定項目、例外階層などを広げないでください。必要性が明確でユーザーが依頼した場合のみ追加します。
+
 ### 1. フォルダ構成 (Root)
 
 ツリー表示（階層が一目で分かるように整形）：
@@ -41,13 +48,14 @@ src/
 │  └─ presenter/         # Usecase 出力 → HTTP レスポンス
 ├─ infrastructure/       # 4. インフラ層（具体実装／外部技術）
 │  ├─ database/          # DBセッション, Engine, 各種DB技術（SQL/NoSQL）
-│  │  ├─ mysql/          # MySQLリポジトリ実装
-│  │  ├─ postgresql/     # PostgreSQLリポジトリ実装（例）
-│  │  ├─ mongodb/        # MongoDBリポジトリ実装（例）
-│  │  └─ redis/          # Redisキャッシュ実装（例）
+│  │  ├─ mysql/          # MySQLリポジトリ実装（各フォルダ直下に必ず config.py）
+│  │  ├─ postgresql/     # PostgreSQLリポジトリ実装（例、config.py 必須）
+│  │  ├─ sqlite/         # SQLiteリポジトリ実装（例、config.py 必須）
+│  │  ├─ mongodb/        # MongoDBリポジトリ実装（例、config.py 必須）
+│  │  ├─ dynamodb/       # DynamoDB実装（例、config.py 必須）
+│  │  └─ redis/          # Redisキャッシュ実装（例、config.py 必須）
 │  ├─ services/          # 外部連携・ドメインサービス等の具体実装
-│  ├─ router/            # FastAPIルーティング: fastapi.py
-│  ├─ di/                # 依存性注入コンテナ
+│  ├─ router/            # FastAPIルーティング: fastapi.py（簡易DIもここで）
 │  └─ storage/           # 外部ストレージクライアント
 └─ main.py               # アプリケーション起動ファイル / Entrypoint
 ```
@@ -65,7 +73,7 @@ src/
     - 内容: `controller/`と`presenter/`
 * `src/infrastructure/` (インフラ層)
     - 責務: 外部技術と`domain`インターフェースの具体実装
-    - 内容: `database/mysql/`, `services/`, `router/`, `di/`
+    - 内容: `database/*/`（各DB技術、各フォルダに`config.py`必須）, `services/`, `router/`
 * `src/main.py`
     - 責務: アプリケーションの起動
     - 内容: `infrastructure/router/fastapi.py`で定義したFastAPIアプリを起動
@@ -75,6 +83,13 @@ src/
 ## 新規APIの追加手順 (ガイド)
 
 ここでは例として「新しいエージェント（Agent）を作成するAPI」を追加する手順をステップバイステップで示します。
+
+### 実装前のチェック（AI向け）
+- 要件を一文で明確化（何を追加・変更するか）。
+- 既存のファイル/命名/パターンを優先し、雛形を必要最小限で適用。
+- 依頼にない層・機能は追加しない（例: 追加のサービス、共通ユーティリティ、設定拡張）。
+- 依存制約を確認（Usecase→Domainのみ。AdapterはUsecaseに、InfraはDomainのIFに）。
+- 既存テストや動作に影響する広範囲の変更は避ける。
 
 ### Step 1: ドメイン層 (src/domain/)
 
@@ -191,6 +206,10 @@ def NewAgent(
     )
 ```
 
+注意（Repositoryの実装範囲）:
+- CRUD以外のメソッド（検索条件の複雑化、集計、ページングユーティリティ等）は、明示的な要求がない限り追加しない。
+- DB固有の最適化・トランザクション管理の高度化は必要最小限。例外は具体的な要件がある場合のみ。
+
 2.  **ドメインサービス・インターフェースの定義:**
     * エンティティや値オブジェクトに当てはまらないビジネスロジックは、`src/domain/services/`にドメインサービスとして定義します。
     * 例: 複数のエンティティにまたがる処理、外部との連携ロジックなど。
@@ -245,6 +264,10 @@ class DeploymentTestDomainService(Protocol):
 ユースケース層は **ドメイン層のオブジェクトのみ** を使用してコードを書きます。
 - 使用可能: `domain/entities/`, `domain/value_objects/`, `domain/services/`（インターフェース）, `domain/repositories/`（インターフェース）
 - 使用禁止: `infrastructure`, `adapter`, 外部ライブラリ（DB、API クライアントなど）
+
+注意（Usecaseの実装範囲）:
+- 入出力DTO、Presenter、Interactor、Factoryのみ作る。ログ、メトリクス、リトライ、キャッシュ等は要件がない限り追加しない。
+- 例外やエラー整形はPresenterとControllerで行い、Interactor内で過剰なハンドリングをしない。
 
 1.  **ユースケースの作成:**
       * `src/usecase/create_agent.py`を作成します。
@@ -694,18 +717,184 @@ def new_create_agent_presenter() -> CreateAgentPresenter:
     return CreateAgentPresenterImpl()
 ```
 
+注意（Adapterの実装範囲）:
+- ControllerはUsecase呼び出しとステータス整形に限定。追加のバリデーションやビジネスロジックは入れない。
+- PresenterはDTO変換のみに限定。フォーマット変換の拡張（日時フォーマットの設定化など）は不要。
+
 ### Step 5: インフラ層 (src/infrastructure/) - 接続
 
 **責務:** すべての部品を「接続」し、FastAPIエンドポイントとして公開します。
 
-1.  **DIコンテナの設定:**
-      * `src/infrastructure/di/`内のDI設定ファイル（例: `container.py`）を編集します。
-      * `IAgentRepository`が要求されたら`AgentRepositoryImpl`を返すように、インターフェースと実装を紐付けます。
-      * `CreateAgentUseCase`や`CreateAgentController`の依存関係も定義します。
-2.  **ルーターの定義:**
-      * `src/infrastructure/router/fastapi.py`を編集します。
-      * DIコンテナから`CreateAgentController`を取得し、FastAPIのエンドポイント（`@router.post("/agents")`）を定義します。
-      * リクエストをコントローラーに渡し、コントローラーからの戻り値（プレゼンターが生成したレスポンス）を返します。
+1.  **ルーター内での依存解決（簡易DI）:**
+      * `src/infrastructure/router/fastapi.py`内で、設定読み込み（`NewMySQLConfigFromEnv`）→リポジトリ/サービスのインスタンス化→ユースケース/コントローラーの生成を行います。
+      * これにより、専用DIコンテナなしでルーターファイルに依存関係を集約できます。
+
+**雛形 (`infrastructure/router/fastapi.py`):**
+
+```python
+from fastapi import APIRouter, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
+# 設定と依存の初期化
+from infrastructure.database.mysql.config import NewMySQLConfigFromEnv
+from infrastructure.database.mysql.agent_repository import MySQLAgentRepository
+from infrastructure.services.auth_service_impl import AuthServiceImpl
+
+from adapter.controller.create_agent_controller import CreateAgentController
+from adapter.presenter.create_agent_presenter import new_create_agent_presenter
+from usecase.create_agent import CreateAgentInput, new_create_agent_interactor
+
+router = APIRouter()
+oauth2_scheme = HTTPBearer()
+db_config = NewMySQLConfigFromEnv()
+agent_repo = MySQLAgentRepository(db_config)
+auth_service = AuthServiceImpl(secret_key="<replace-with-secret>")
+ctx_timeout = 10.0
+
+def build_create_agent_controller() -> CreateAgentController:
+    presenter = new_create_agent_presenter()
+    usecase = new_create_agent_interactor(presenter, agent_repo, auth_service, ctx_timeout)
+    return CreateAgentController(usecase)
+
+@router.post("/v1/agents")
+def create_agent(request: CreateAgentInput, credentials: HTTPAuthorizationCredentials = Depends(oauth2_scheme)):
+    controller = build_create_agent_controller()
+    input_data = CreateAgentInput(
+        token=credentials.credentials,
+        name=request.name,
+        description=request.description,
+    )
+    response = controller.execute(input_data)
+    # 共通レスポンス整形は別関数に切り出してもOK
+    return response
+```
+
+#### fastapi.py の進化ガイド（複数エンドポイント・共通ヘルパ・サービス集約）
+
+単一のエンドポイントから、次のような構成へ段階的に進化させます。
+
+- 共通レスポンス整形ヘルパ `handle_response()` を用意（`dataclass`の`datetime`をISO文字列へ変換、`StreamingResponse`は透過返却、成功/エラーのHTTPステータス統一）。
+- PydanticのRequest DTOをルーター直下で定義し、Adapter層のOutput DTOを`response_model`で明示。
+- 認証は `HTTPBearer` を使い、`NewAuthDomainService(user_repo)` を都度生成または共有。
+- 主要リポジトリ・サービス類（ユーザー/エージェント/ジョブ/可視化/デプロイメント/メソッド）をファイル先頭で初期化し、各ルートでPresenter/Usecase/Controllerを生成。
+- 非同期の外部呼び出し用に `httpx.AsyncClient` を初期化し、デプロイテストドメインサービスへ注入。
+- ファイルアップロードはFastAPIの`UploadFile`を受け取り、ドメイン層の`UploadedFileStream`適合アダプタに変換してUsecaseへ渡す。
+
+スケルトン例（抜粋・要点のみ）：
+
+```python
+from typing import Optional, Dict
+from dataclasses import is_dataclass, asdict
+from datetime import datetime
+from fastapi import APIRouter, Depends, UploadFile, File, Path
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import JSONResponse, Response, StreamingResponse
+from pydantic import BaseModel
+import httpx
+
+# --- Repositories / Config ---
+from infrastructure.database.mysql.config import NewMySQLConfigFromEnv
+from infrastructure.database.mysql.user_repository import MySQLUserRepository
+from infrastructure.database.mysql.agent_repository import MySQLAgentRepository
+from infrastructure.database.mysql.finetuning_job_repository import MySQLFinetuningJobRepository
+from infrastructure.database.mysql.weight_visualization_repository import MySQLWeightVisualizationRepository
+from infrastructure.database.mysql.deployment_repository import MySQLDeploymentRepository
+from infrastructure.database.mysql.methods_repository import MySQLMethodsRepository
+
+# --- Domain Services Implementations ---
+from infrastructure.services.auth_domain_service_impl import NewAuthDomainService
+from infrastructure.services.file_storage_domain_service_impl import NewFileStorageDomainService
+from infrastructure.services.job_queue_domain_service_impl import NewJobQueueDomainService
+from infrastructure.services.system_time_domain_service_impl import NewSystemTimeDomainService
+from infrastructure.services.get_image_stream_domain_service_impl import NewFileStreamDomainService
+from infrastructure.services.job_method_finder_domain_service_impl import JobMethodFinderDomainServiceImpl
+from infrastructure.services.deployment_test_domain_service_impl import DeploymentTestDomainServiceImpl
+
+# --- Controllers / Presenters / Usecases ---
+from adapter.controller.create_agent_controller import CreateAgentController
+from adapter.presenter.create_agent_presenter import new_create_agent_presenter
+from usecase.create_agent import CreateAgentInput, CreateAgentOutput, new_create_agent_interactor
+
+# ...他のAuth/User/Jobs/Deploymentsのインポートも同様に追加...
+
+router = APIRouter()
+db_config = NewMySQLConfigFromEnv()
+user_repo = MySQLUserRepository(db_config)
+agent_repo = MySQLAgentRepository(db_config)
+finetuning_job_repo = MySQLFinetuningJobRepository(db_config)
+weight_visualization_repo = MySQLWeightVisualizationRepository(db_config)
+deployment_repo = MySQLDeploymentRepository(db_config)
+methods_repo = MySQLMethodsRepository(db_config)
+
+file_storage_service = NewFileStorageDomainService()
+job_queue_service = NewJobQueueDomainService()
+system_time_service = NewSystemTimeDomainService()
+file_stream_service = NewFileStreamDomainService()
+job_method_finder_service = JobMethodFinderDomainServiceImpl(timeout=5)
+
+oauth2_scheme = HTTPBearer()
+ctx_timeout = 10.0
+async_http_client = httpx.AsyncClient(timeout=15.0)
+test_inference_service = DeploymentTestDomainServiceImpl(client=async_http_client)
+
+def handle_response(response_dict: Dict, success_code: int = 200):
+    status_code = response_dict.get("status", 500)
+    data = response_dict.get("data")
+    if isinstance(data, StreamingResponse):
+        return data
+    if is_dataclass(data):
+        data = asdict(data)
+        def convert_datetime_to_str(obj):
+            if isinstance(obj, datetime):
+                return obj.isoformat()
+            if isinstance(obj, dict):
+                return {k: convert_datetime_to_str(v) for k, v in obj.items()}
+            if isinstance(obj, list):
+                return [convert_datetime_to_str(v) for v in obj]
+            return obj
+        data = convert_datetime_to_str(data)
+    if status_code >= 400:
+        return JSONResponse(content=data, status_code=status_code)
+    if success_code == 204:
+        return Response(status_code=204)
+    return JSONResponse(content=data, status_code=success_code)
+
+class CreateAgentRequest(BaseModel):
+    name: str
+    description: Optional[str]
+
+@router.post("/v1/agents", response_model=CreateAgentOutput)
+def create_agent(request: CreateAgentRequest, credentials: HTTPAuthorizationCredentials = Depends(oauth2_scheme)):
+    token = credentials.credentials
+    presenter = new_create_agent_presenter()
+    auth_service = NewAuthDomainService(user_repo)
+    usecase = new_create_agent_interactor(presenter, agent_repo, auth_service, ctx_timeout)
+    controller = CreateAgentController(usecase)
+    input_data = CreateAgentInput(token=token, name=request.name, description=request.description)
+    response_dict = controller.execute(input_data)
+    return handle_response(response_dict, success_code=201)
+```
+
+上記パターンを踏襲して、Auth（signup/login/me）、Agent（一覧/作成/全件）、Finetuning Job（作成/一覧/可視化）、Deployment（作成/取得/メソッド取得・設定/テスト）、ファイルストリーム（画像可視化の配信）などのルートを同様に構築します。
+
+補足:
+- 依存の共有/生成方針は「リポジトリ/サービスは原則共有、Presenter/Usecase/Controllerは各リクエストで生成」。
+- `httpx.AsyncClient` はアプリ終了時に`aclose()`が必要。Lifespan管理や`startup/shutdown`イベントでクリーンアップする設計を推奨。
+- `response_model` には Adapter層の Output DTO を指定し、FastAPIによるスキーマ公開を活用。
+- 大規模化したら、ルーターを複数モジュールに分割して`app.include_router()`で統合。
+
+禁止事項（過剰実装の防止）:
+- 依頼がないのに新規の共通ライブラリや設定モジュールを追加しない。
+- 例示されていないルート/DTO/サービスを勝手に拡張しない。
+- ドキュメントの雛形をすべて同時に導入しない。必要な部分のみ差し込む。
+- レイヤー原則に反する依存を作らない（Usecase→Infra/Adapterへの直接参照など）。
+
+最終チェックリスト:
+- スコープ外のファイル変更をしていないか。
+- 追加箇所が最小限（ルート、DTO、Presenter、Interactor、Repo/Serviceの必要分）か。
+- エラーハンドリングはController/Presenterで十分か（Interactorで過剰に抱え込んでいないか）。
+- 既存の命名・配置に整合しているか。
+- Run/起動方法に影響がないか（`main.py`と`router`の構成は既存どおり）。
 
 ### Step 6: 起動ファイル (src/main.py)
 
