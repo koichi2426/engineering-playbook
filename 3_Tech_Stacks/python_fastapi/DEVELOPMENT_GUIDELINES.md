@@ -78,11 +78,41 @@ src/
 
 **責務:** ビジネスルール（何ができるか）のインターフェースを定義します。
 
+**使用可能なライブラリ:**  
+ドメイン層では外部ライブラリへの依存を避け、以下の標準ライブラリのみ使用します。
+
+```python
+import abc
+from dataclasses import dataclass, field
+from typing import List, Optional
+```
+
+**ドメイン層内での相互参照:**  
+ドメイン層内のオブジェクト（エンティティ、値オブジェクト、リポジトリインターフェース、ドメインサービス）は互いに参照・利用できます。
+
+例: エンティティで値オブジェクトをインポート
+```python
+# src/domain/entities/deployment_methods.py
+from ..value_objects.id import ID
+from ..value_objects.method import Method
+
+@dataclass
+class DeploymentMethods:
+    id: ID
+    deployment_id: ID
+    methods: List[Method] = field(default_factory=list)
+```
+
 1.  **エンティティ / 値オブジェクトの定義:**
     * 必要に応じて`src/domain/entities/agent.py`や`src/domain/value_objects/`に、純粋なPythonクラスとしてエンティティや値オブジェクトを定義（または更新）します。
-2.  **リポジトリ・インターフェースの定義:**
+2.  **ドメインサービス・インターフェースの定義:**
+    * エンティティや値オブジェクトに当てはまらないビジネスロジックは、`src/domain/services/`にドメインサービスとして定義します。
+    * 例: 複数のエンティティにまたがる処理、外部との連携ロジックなど。
+    * 命名規則: `[ドメインサービスの名前]_service.py`（例: `auth_service.py`, `notification_service.py`）
+3.  **リポジトリ・インターフェースの定義:**
     * `src/domain/repositories/agent_repository.py`に、`IAgentRepository`というインターフェース（ABC: 抽象基底クラス）を定義します。
-    * 「操作」のみ（例: `create`, `find_by_id`）を定義します。
+    * リポジトリで定義するメソッドは **CRUD操作のみ** です: **Create（作成）**、**Read（読み取り）**、**Update（更新）**、**Delete（削除）**
+    * 例: `create`, `find_by_id`, `find_all`, `update`, `delete`
 
 **コード例 (`IAgentRepository`):**
 ```python
@@ -99,6 +129,11 @@ class IAgentRepository(ABC):
 ### Step 2: ユースケース層 (src/usecase/)
 
 **責務:** アプリケーション固有のロジック（どういう流れで実行するか）を実装します。
+
+**依存関係の原則:**  
+ユースケース層は **ドメイン層のオブジェクトのみ** を使用してコードを書きます。
+- 使用可能: `domain/entities/`, `domain/value_objects/`, `domain/services/`（インターフェース）, `domain/repositories/`（インターフェース）
+- 使用禁止: `infrastructure`, `adapter`, 外部ライブラリ（DB、API クライアントなど）
 
 1.  **ユースケースの作成:**
       * `src/usecase/create_agent.py`を作成します。
