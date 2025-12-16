@@ -16,6 +16,11 @@
   - [Step 4: アダプタ層](#step-4-アダプタ層-srcadapter---翻訳)
   - [Step 5: インフラ層 (接続)](#step-5-インフラ層-srcinfrastructure---接続)
   - [Step 6: 起動ファイル](#step-6-起動ファイル-srcmainpy)
+- [テスト設計と実装ガイドライン](#テスト設計と実装ガイドライン)
+  - [テストフォルダ構成](#1-テストフォルダ構成)
+  - [テスト方針](#2-テスト方針)
+  - [実装ルール](#3-実装ルール)
+  - [実行方法](#4-実行方法)
 
 ---
 
@@ -1146,3 +1151,227 @@ uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
 - `--reload`: ファイル変更時に自動リロード（開発環境用）
 - `--host 0.0.0.0`: すべてのインターフェースでリッスン
 - `--port 8000`: ポート8000で起動
+
+---
+
+## テスト設計と実装ガイドライン
+
+本プロジェクトでは、クリーンアーキテクチャの階層構造に基づき、テストの責務を明確に分離します。AIおよび開発者は、新規機能を実装する際、必ず以下の構造とテンプレートに従ってテストを作成してください。
+
+### 1. テストフォルダ構成
+
+`tests/`ディレクトリはプロジェクトルート（`src/`と同階層）に配置し、**テストの性質（外部接続の有無）**で大分類します。
+
+```
+backend/
+├─ src/                  # アプリケーションコード
+├─ tests/                # テストコード
+│  ├─ conftest.py        # 共通フィクスチャ（DB接続、Mock設定など）
+│  ├─ factories/         # テストデータ生成用（polyfactory推奨）
+│  ├─ unit/              # ★ 単体テスト（DB/Networkなし、高速）
+│  │  ├─ domain/         # 値オブジェクト・エンティティ
+│  │  ├─ usecase/        # ビジネスロジック（最重要）
+│  │  └─ adapter/        # Controller/Presenter
+│  └─ integration/       # ★ 統合テスト（DB/Networkあり、低速）
+│     ├─ infrastructure/ # Repository実装（実DB検証）
+│     └─ api/            # E2Eエンドポイント検証
+├─ pytest.ini            # pytest設定
+└─ requirements.txt
+```
+
+### 2. 環境設定とルール
+
+#### 必須ライブラリ
+
+```
+pytest
+pytest-mock
+pytest-asyncio
+httpx
+```
+
+#### 設定ファイル (pytest.ini)
+
+プロジェクトルートに配置し、srcモジュールを解決可能にします。
+
+```ini
+[pytest]
+pythonpath = .
+testpaths = tests
+asyncio_mode = auto
+```
+
+#### 共通フィクスチャ (tests/conftest.py)
+
+DB接続や共通のMock定義はここに集約します。
+
+```python
+import pytest
+from infrastructure.database.mysql.config import MySQLConfig
+from infrastructure.database.mysql.agent_repository import MySQLAgentRepository
+
+@pytest.fixture
+def db_config():
+    return MySQLConfig(host="test_db", port=3306, user="root", password="pw", database="test")
+
+@pytest.fixture
+def agent_repo(db_config):
+    return MySQLAgentRepository(db_config)
+```
+
+### 3. 各層のテスト実装テンプレート（AIリファレンス）
+
+重要: 新規クラスを実装する際は、以下のテンプレートパターンを厳守してください。
+
+#### A. Domain層 (Unit Test)
+
+**配置**: `tests/unit/domain/`
+
+**責務**: バリデーションやドメインロジックの検証。DB接続不可。
+
+```python
+# tests/unit/domain/entities/test_agent.py
+import pytest
+from domain.entities.agent import NewAgent
+from domain.value_objects.id import ID
+
+class TestAgent:
+    def test_new_agent_valid(self):
+        """正常系: 正しい値でエンティティが生成されること"""
+        agent = NewAgent(id=1, user_id=100, owner="test_user", name="MyAgent", description="desc")
+        assert agent.id == ID(1)
+        assert agent.name == "MyAgent"
+
+    def test_new_agent_invalid_name(self):
+        """異常系: バリデーションエラー"""
+        with pytest.raises(ValueError, match="Name cannot be empty"):
+            NewAgent(id=1, user_id=100, owner="test_user", name="", description="desc")
+```
+
+#### B. Usecase層 (Unit Test) ★最重要
+
+**配置**: `tests/unit/usecase/`
+
+**責務**: ビジネスフローの検証。全ての依存（Repo, Service）をMock化すること。
+
+```python
+# tests/unit/usecase/test_create_agent.py
+import pytest
+from unittest.mock import Mock
+from usecase.create_agent import CreateAgentInteractor, CreateAgentInput, CreateAgentOutput
+from domain.entities.agent import NewAgent
+
+class TestCreateAgentInteractor:
+    @pytest.fixture
+    def mocks(self, mocker):
+        return {
+            "presenter": mocker.Mock(),
+            "repo": mocker.Mock(),
+            "auth_service": mocker.Mock(),
+        }
+
+    def test_execute_success(self, mocks):
+        """正常系: 依存コンポーネントが正しく連携するか"""
+        # Arrange
+        input_data = CreateAgentInput(token="valid", name="Agent", description="desc")
+        mocks["auth_service"].verify_token.return_value = Mock(id=Mock(value=99), username="tester")
+        mocks["repo"].create.return_value = NewAgent(id=1, user_id=99, owner="tester", name="Agent", description="desc")
+        mocks["presenter"].output.return_value = CreateAgentOutput(id=1, user_id=99, owner="tester", name="Agent", description="desc")
+
+        interactor = CreateAgentInteractor(mocks["presenter"], mocks["repo"], mocks["auth_service"])
+
+        # Act
+        result, err = interactor.execute(input_data)
+
+        # Assert
+        assert err is None
+        assert result.id == 1
+        mocks["repo"].create.assert_called_once()  # 呼び出し確認
+```
+
+#### C. Adapter層 (Unit Test)
+
+**配置**: `tests/unit/adapter/`
+
+**責務**: Controllerのステータスコード振り分けやPresenterの変換ロジック検証。
+
+```python
+# tests/unit/adapter/controller/test_create_agent_controller.py
+from adapter.controller.create_agent_controller import CreateAgentController
+from usecase.create_agent import CreateAgentInput, CreateAgentOutput
+
+def test_controller_success(mocker):
+    # Arrange
+    mock_usecase = mocker.Mock()
+    mock_usecase.execute.return_value = (CreateAgentOutput(1, 1, "owner", "name", "desc"), None)
+    controller = CreateAgentController(mock_usecase)
+
+    # Act
+    response = controller.execute(CreateAgentInput("token", "name", "desc"))
+
+    # Assert
+    assert response["status"] == 201
+    assert response["data"].id == 1
+```
+
+#### D. Infrastructure層 (Integration Test)
+
+**配置**: `tests/integration/infrastructure/`
+
+**責務**: 実際にDBに接続し、SQLの正当性とCRUD動作を確認する。
+
+```python
+# tests/integration/infrastructure/mysql/test_agent_repository.py
+import pytest
+from infrastructure.database.mysql.agent_repository import MySQLAgentRepository
+from domain.entities.agent import NewAgent
+
+# conftest.py の db_config フィクスチャを利用
+def test_repository_crud(db_config):
+    # Setup
+    repo = MySQLAgentRepository(db_config)
+    agent = NewAgent(0, 1, "owner", "RepoTest", "desc")
+
+    # Create & Read
+    created = repo.create(agent)
+    found = repo.find_by_id(created.id)
+    assert found.name == "RepoTest"
+    
+    # Delete
+    repo.delete(created.id)
+    assert repo.find_by_id(created.id) is None
+```
+
+#### E. API End-to-End (Integration Test)
+
+**配置**: `tests/integration/api/`
+
+**責務**: ルーター設定、DIの結合、HTTPレスポンスの統合確認。
+
+```python
+# tests/integration/api/test_agents_api.py
+from fastapi.testclient import TestClient
+from src.main import app
+
+client = TestClient(app)
+
+def test_post_agents_e2e():
+    """DBまで貫通してAPIが成功するか検証"""
+    response = client.post(
+        "/v1/agents",
+        json={"name": "E2E Agent", "description": "integration"},
+        headers={"Authorization": "Bearer mock_valid_token"}
+    )
+    assert response.status_code == 201
+    assert response.json()["name"] == "E2E Agent"
+```
+
+### 4. 実行コマンド
+
+```bash
+pytest                  # 全テスト実行
+pytest tests/unit       # Unitテストのみ（開発中推奨）
+pytest tests/integration # DB接続テストのみ
+pytest -v               # 詳細出力
+pytest -k "create_agent" # パターンマッチ実行
+```
