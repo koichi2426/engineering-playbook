@@ -1,10 +1,76 @@
-# 開発ガイドライン (FastAPI)
+# プロジェクト構成と開発ガイドライン (FastAPI)
 
-このドキュメントは、`project_structure.md`で定義されたフォルダ構成に基づき、新規API（ユースケース）を追加する際の標準的な開発手順を定義します。
+このドキュメントは、フォルダ構成（What/Where）と新規API追加の標準的な開発手順（How）を1つにまとめたものです。クリーンアーキテクチャの4層に基づき、配置場所と手順の両方をここで参照できます。
 
 ---
 
-## 新規APIの追加手順
+## プロジェクト構成 (概要)
+
+この構成は、`2_Concepts/clean_architecture.md`で定義した4層の責務に基づいています。
+
+### 1. フォルダ構成 (Root)
+
+ツリー表示（階層が一目で分かるように整形）：
+
+```
+backend/
+├─ Dockerfile
+├─ docker-compose.yml
+├─ .env.example
+├─ requirements.txt
+├─ alembic.ini
+├─ alembic/              # DBマイグレーションスクリプト
+└─ src/                  # ★ すべてのアプリケーションコード
+```
+
+### 2. フォルダ構成 (src/)
+
+ツリー表示：
+
+```
+src/
+├─ domain/               # 1. ドメイン層（純粋なビジネスルール）
+│  ├─ entities/          # エンティティ（クラスを実装）: user.py, agent.py など
+│  ├─ value_objects/     # 値オブジェクト（クラスを実装）: email.py, id.py など
+│  ├─ services/          # ドメインサービス（インターフェース）
+│  └─ repositories/      # リポジトリ（インターフェース）
+├─ usecase/              # 2. ユースケース層（操作フロー）
+│  ├─ auth_login.py
+│  └─ create_agent.py    # ほか機能ごとに追加
+├─ adapter/              # 3. アダプタ層（翻訳）
+│  ├─ controller/        # HTTP → Usecase 入力
+│  └─ presenter/         # Usecase 出力 → HTTP レスポンス
+├─ infrastructure/       # 4. インフラ層（具体実装／外部技術）
+│  ├─ database/          # DBセッション, Engine, SQLAlchemyモデル
+│  │  └─ mysql/          # リポジトリの実装: user_repository.py 等
+│  ├─ services/          # 外部連携・ドメインサービス等の具体実装
+│  ├─ router/            # FastAPIルーティング: fastapi.py
+│  ├─ di/                # 依存性注入コンテナ
+│  └─ storage/           # 外部ストレージクライアント
+└─ main.py               # アプリケーション起動ファイル / Entrypoint
+```
+
+### 3. 各ディレクトリの責務 (src/)
+
+* `src/domain/` (ドメイン層)
+    - 責務: 純粋なビジネスルール
+    - 内容: `entities/`, `value_objects/`, `services/`(ロジックIF), `repositories/`(永続化IF)
+* `src/usecase/` (ユースケース層)
+    - 責務: アプリケーション固有のロジック
+    - 内容: 具体的な操作フローを実装。`domain`層のインターフェースにのみ依存
+* `src/adapter/` (アダプタ層)
+    - 責務: 外部（HTTP）と内部（Usecase）の翻訳
+    - 内容: `controller/`と`presenter/`
+* `src/infrastructure/` (インフラ層)
+    - 責務: 外部技術と`domain`インターフェースの具体実装
+    - 内容: `database/mysql/`, `services/`, `router/`, `di/`
+* `src/main.py`
+    - 責務: アプリケーションの起動
+    - 内容: `infrastructure/router/fastapi.py`で定義したFastAPIアプリを起動
+
+---
+
+## 新規APIの追加手順 (ガイド)
 
 ここでは例として「新しいエージェント（Agent）を作成するAPI」を追加する手順をステップバイステップで示します。
 
