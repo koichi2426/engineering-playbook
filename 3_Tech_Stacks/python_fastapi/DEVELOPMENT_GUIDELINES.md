@@ -28,7 +28,7 @@ class IAgentRepository(ABC):
     @abstractmethod
     def create(self, agent: Agent) -> Agent:
         pass
-````
+```
 
 ### Step 2: ユースケース層 (src/usecase/)
 
