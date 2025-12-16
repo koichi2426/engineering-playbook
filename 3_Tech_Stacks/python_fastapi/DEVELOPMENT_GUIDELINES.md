@@ -40,8 +40,11 @@ src/
 │  ├─ controller/        # HTTP → Usecase 入力
 │  └─ presenter/         # Usecase 出力 → HTTP レスポンス
 ├─ infrastructure/       # 4. インフラ層（具体実装／外部技術）
-│  ├─ database/          # DBセッション, Engine, SQLAlchemyモデル
-│  │  └─ mysql/          # リポジトリの実装: user_repository.py 等
+│  ├─ database/          # DBセッション, Engine, 各種DB技術（SQL/NoSQL）
+│  │  ├─ mysql/          # MySQLリポジトリ実装
+│  │  ├─ postgresql/     # PostgreSQLリポジトリ実装（例）
+│  │  ├─ mongodb/        # MongoDBリポジトリ実装（例）
+│  │  └─ redis/          # Redisキャッシュ実装（例）
 │  ├─ services/          # 外部連携・ドメインサービス等の具体実装
 │  ├─ router/            # FastAPIルーティング: fastapi.py
 │  ├─ di/                # 依存性注入コンテナ
@@ -377,28 +380,246 @@ def new_create_agent_interactor(
 
 **責務:** `domain`層で定義されたインターフェースの「具体的な実装」を行います。
 
-1.  **リポジトリの実装:**
-      * `src/infrastructure/database/mysql/agent_repository.py`を作成します。
-      * `IAgentRepository`を継承し、`AgentRepositoryImpl`クラスを定義します。
-      * SQLAlchemyの`Session`など、具体的なDB技術を使って`create`メソッドを実装します。
+1.  **データベース設定 (config.py):**
+      * 各データストアフォルダの直下に`config.py`を配置します。
+      * データベース接続情報を環境変数から読み込むファクトリ関数を定義します。
 
-**コード例 (`agent_repository.py`):**
+**コード例 (MySQL設定: `infrastructure/database/mysql/config.py`):**
 
 ```python
-from src.domain.repositories.agent_repository import IAgentRepository
-from src.domain.entities.agent import Agent
-from sqlalchemy.orm import Session
-# from src.infrastructure.database.models import AgentModel
+import os
+from dataclasses import dataclass
+from dotenv import load_dotenv
 
-class AgentRepositoryImpl(IAgentRepository):
-    def __init__(self, db_session: Session):
-        self.db = db_session
+@dataclass
+class MySQLConfig:
+    """
+    MySQLデータベースへの接続情報を保持するデータクラス。
+    """
+    host: str
+    port: int
+    user: str
+    password: str
+    database: str
+
+def NewMySQLConfigFromEnv() -> MySQLConfig:
+    """
+    .envファイルから環境変数を読み込み、MySQLConfigインスタンスを生成するファクトリ関数。
+
+    プロジェクトのルートに、以下のような内容で.envファイルを作成してください:
+    DB_HOST=db
+    DB_PORT=3306
+    DB_USER=root
+    DB_PASSWORD=your_local_password
+    DB_NAME=method_selector_db
+    """
+    load_dotenv()
+
+    host = os.getenv("DB_HOST")
+    port_str = os.getenv("DB_PORT")
+    user = os.getenv("DB_USER")
+    password = os.getenv("DB_PASSWORD")
+    database = os.getenv("DB_NAME")
+
+    if not all([host, port_str, user, password, database]):
+        raise ValueError(".envファイルに必要なデータベース設定がすべて含まれていません。")
+
+    try:
+        port = int(port_str)
+    except ValueError:
+        raise ValueError("DB_PORTは有効な整数である必要があります。")
+
+    return MySQLConfig(
+        host=host,
+        port=port,
+        user=user,
+        password=password,
+        database=database,
+    )
+```
+
+2.  **リポジトリの実装:**
+      * `src/infrastructure/database/`配下に、使用するデータベース技術ごとのディレクトリを作成します。
+      * **SQL**: `mysql/`, `postgresql/`, `sqlite/` など
+      * **NoSQL**: `mongodb/`（ドキュメント）, `redis/`（KVS/キャッシュ）, `dynamodb/`（KVS） など
+      * 各フォルダ直下に必ず`config.py`を配置し、その後リポジトリ実装ファイルを作成します。
+      * エンティティファイル内で定義したリポジトリインターフェースを継承し、実装クラスを定義します。
+      * 各DB技術固有のライブラリ（SQLAlchemy、PyMongo、redis-py、boto3など）を使ってCRUDメソッドを実装します。
+
+**コード例 (リポジトリ実装: `infrastructure/database/mysql/agent_repository.py`):**
+
+```python
+import mysql.connector
+from mysql.connector import pooling
+from typing import Optional, List
+from contextlib import contextmanager
+
+from domain.entities.agent import Agent, NewAgent, AgentRepository
+from domain.value_objects.id import ID
+from .config import MySQLConfig
+
+
+class MySQLAgentRepository(AgentRepository):
+    """
+    AgentRepository の MySQL 実装
+    """
+
+    def __init__(self, config: MySQLConfig):
+        try:
+            self.pool = pooling.MySQLConnectionPool(
+                pool_name="agent_repo_pool",
+                pool_size=5,
+                pool_reset_session=True,
+                host=config.host,
+                port=config.port,
+                user=config.user,
+                password=config.password,
+                database=config.database
+            )
+        except mysql.connector.Error as err:
+            print(f"Error initializing agent connection pool: {err}")
+            raise
+
+    @contextmanager
+    def _get_cursor(self, commit: bool = False):
+        """
+        コネクションプールからカーソルを取得し、処理後にクローズするコンテキストマネージャ
+        """
+        conn = None
+        cursor = None
+        try:
+            conn = self.pool.get_connection()
+            cursor = conn.cursor()
+            yield cursor
+            if commit:
+                conn.commit()
+        except mysql.connector.Error as err:
+            if conn:
+                conn.rollback()
+            print(f"Database error in agent repository: {err}")
+            raise
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
+
+    def _map_row_to_agent(self, row: tuple) -> Optional[Agent]:
+        """
+        DBから取得した単一の行(タプル)をAgentドメインオブジェクトに変換する
+        """
+        if not row:
+            return None
+        
+        # (id, user_id, owner, name, description) の順序を想定
+        return NewAgent(
+            id=row[0],
+            user_id=row[1],
+            owner=row[2],
+            name=row[3],
+            description=row[4]
+        )
 
     def create(self, agent: Agent) -> Agent:
-        # DBモデルへの変換とSQLAlchemyでの永続化処理
-        # ...
-        return agent
+        sql = """
+        INSERT INTO agents (user_id, owner, name, description)
+        VALUES (%s, %s, %s, %s)
+        """
+        data = (
+            agent.user_id.value,
+            agent.owner,
+            agent.name,
+            agent.description
+        )
+
+        with self._get_cursor(commit=True) as cursor:
+            cursor.execute(sql, data)
+            new_id = cursor.lastrowid
+
+        # 新しく採番されたIDでAgentオブジェクトを再構築して返す
+        return NewAgent(
+            id=new_id,
+            user_id=agent.user_id.value,
+            owner=agent.owner,
+            name=agent.name,
+            description=agent.description
+        )
+
+    def find_by_id(self, agent_id: ID) -> Optional[Agent]:
+        sql = "SELECT id, user_id, owner, name, description FROM agents WHERE id = %s"
+        with self._get_cursor() as cursor:
+            cursor.execute(sql, (agent_id.value,))
+            row = cursor.fetchone()
+        
+        return self._map_row_to_agent(row)
+
+    def list_by_user_id(self, user_id: ID) -> List[Agent]:
+        sql = "SELECT id, user_id, owner, name, description FROM agents WHERE user_id = %s ORDER BY id"
+        with self._get_cursor() as cursor:
+            cursor.execute(sql, (user_id.value,))
+            rows = cursor.fetchall()
+            
+        return [self._map_row_to_agent(row) for row in rows if row]
+
+    def find_all(self) -> List[Agent]:
+        sql = "SELECT id, user_id, owner, name, description FROM agents ORDER BY id"
+        with self._get_cursor() as cursor:
+            cursor.execute(sql)
+            rows = cursor.fetchall()
+            
+        return [self._map_row_to_agent(row) for row in rows if row]
+
+    def update(self, agent: Agent) -> None:
+        sql = """
+        UPDATE agents
+        SET name = %s, description = %s
+        WHERE id = %s AND user_id = %s
+        """
+        data = (
+            agent.name,
+            agent.description,
+            agent.id.value,
+            agent.user_id.value
+        )
+        
+        with self._get_cursor(commit=True) as cursor:
+            cursor.execute(sql, data)
+
+    def delete(self, agent_id: ID) -> None:
+        sql = "DELETE FROM agents WHERE id = %s"
+        with self._get_cursor(commit=True) as cursor:
+            cursor.execute(sql, (agent_id.value,))
 ```
+
+2.  **ドメインサービスの実装:**
+      * `src/infrastructure/services/auth_service_impl.py`を作成します。
+      * `domain/services/`で定義したドメインサービスインターフェースを実装します。
+      * 外部API、認証ライブラリなど、具体的な技術を使用できます。
+
+**コード例 (ドメインサービス実装: `infrastructure/services/auth_service_impl.py`):**
+
+```python
+from domain.services.auth_service import AuthDomainService
+from domain.entities.user import User
+from domain.value_objects.id import ID
+import jwt  # 外部ライブラリの使用OK
+
+class AuthServiceImpl(AuthDomainService):
+    def __init__(self, secret_key: str):
+        self.secret_key = secret_key
+    
+    def verify_token(self, token: str) -> User:
+        # JWTトークンを検証してユーザー情報を返す
+        payload = jwt.decode(token, self.secret_key, algorithms=["HS256"])
+        return User(
+            id=ID(payload["user_id"]),
+            username=payload["username"]
+        )
+```
+
+3.  **その他の外部連携:**
+      * `src/infrastructure/storage/`に外部ストレージクライアント（S3、GCSなど）を実装します。
+      * 必要に応じて、メール送信、通知サービスなどの実装もここに配置します。
 
 ### Step 4: アダプタ層 (src/adapter/) - 翻訳
 
