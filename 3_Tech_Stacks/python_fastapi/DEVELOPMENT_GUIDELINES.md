@@ -23,7 +23,7 @@
 
 この構成は、`2_Concepts/clean_architecture.md`で定義した4層の責務に基づいています。
 
-> 注意（AI実装向けガードライン）
+> 注意（AI実装向けガイドライン）
 > - このドキュメントのコード例は「雛形」かつ「参照用」です。要求にない機能・抽象化・汎用化は一切追加しないでください。
 > - 実装は「最小限のスコープ」で行います。ルート・DTO・Presenter・Usecase・Repository・Serviceのうち、タスク達成に必要な部分だけを作成・編集します。
 > - 依存関係はレイヤ原則に厳密に従います（UsecaseはDomainのみ、InfrastructureやAdapterの具体実装へ直接依存しない）。
@@ -57,7 +57,8 @@ WORKDIR /app
 
 # 環境変数を設定（UTF-8対応）
 ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app
 
 # 依存ライブラリのリストをコピー
 COPY requirements.txt .
@@ -67,9 +68,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # アプリケーションのコードをコピー
 COPY . .
-
-# Pythonモジュール探索パスを設定（src配下を解決）
-ENV PYTHONPATH=/app/src
 
 # コンテナ起動時にAPIサーバーを実行（0.0.0.0を指定）
 CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
@@ -502,10 +500,10 @@ class CreateAgentInteractor:
             # トークンを検証してユーザー情報を取得
             user = self.auth_service.verify_token(input.token)
 
-            # Agentエンティティを生成
-            agent_to_create = Agent(
-                id=ID(0),  # IDはDBで自動採番される
-                user_id=user.id,
+            # Agentエンティティを生成（ファクトリ関数を使用）
+            agent_to_create = NewAgent(
+                id=0,  # IDはDBで自動採番される
+                user_id=user.id.value,
                 owner=user.username,
                 name=input.name,
                 description=input.description,
@@ -858,8 +856,17 @@ class CreateAgentController:
         try:
             output, err = self.uc.execute(input_data)
             if err:
-                # トークン検証エラーやその他のユースケースエラー
-                return {"status": 401, "data": {"error": str(err)}}
+                # エラーの種類に応じてHTTPステータスコードを決定
+                error_msg = str(err)
+                if "Auth" in error_msg or "token" in error_msg.lower():
+                    # 認証系エラー
+                    return {"status": 401, "data": {"error": error_msg}}
+                elif "Invalid" in error_msg or "not found" in error_msg.lower():
+                    # リクエストの不正値
+                    return {"status": 400, "data": {"error": error_msg}}
+                else:
+                    # その他のエラー
+                    return {"status": 500, "data": {"error": error_msg}}
             
             # 成功
             return {"status": 201, "data": output}
@@ -982,11 +989,11 @@ from infrastructure.database.mysql.deployment_repository import MySQLDeploymentR
 from infrastructure.database.mysql.methods_repository import MySQLMethodsRepository
 
 # --- Domain Services Implementations ---
-from infrastructure.services.auth_domain_service_impl import NewAuthDomainService
-from infrastructure.services.file_storage_domain_service_impl import NewFileStorageDomainService
-from infrastructure.services.job_queue_domain_service_impl import NewJobQueueDomainService
-from infrastructure.services.system_time_domain_service_impl import NewSystemTimeDomainService
-from infrastructure.services.get_image_stream_domain_service_impl import NewFileStreamDomainService
+from infrastructure.services.auth_domain_service_impl import AuthServiceImpl
+from infrastructure.services.file_storage_domain_service_impl import FileStorageDomainServiceImpl
+from infrastructure.services.job_queue_domain_service_impl import JobQueueDomainServiceImpl
+from infrastructure.services.system_time_domain_service_impl import SystemTimeDomainServiceImpl
+from infrastructure.services.get_image_stream_domain_service_impl import FileStreamDomainServiceImpl
 from infrastructure.services.job_method_finder_domain_service_impl import JobMethodFinderDomainServiceImpl
 from infrastructure.services.deployment_test_domain_service_impl import DeploymentTestDomainServiceImpl
 
@@ -1006,11 +1013,12 @@ weight_visualization_repo = MySQLWeightVisualizationRepository(db_config)
 deployment_repo = MySQLDeploymentRepository(db_config)
 methods_repo = MySQLMethodsRepository(db_config)
 
-file_storage_service = NewFileStorageDomainService()
-job_queue_service = NewJobQueueDomainService()
-system_time_service = NewSystemTimeDomainService()
-file_stream_service = NewFileStreamDomainService()
+file_storage_service = FileStorageDomainServiceImpl(storage_client=None)  # S3やGCSクライアントを注入
+job_queue_service = JobQueueDomainServiceImpl()
+system_time_service = SystemTimeDomainServiceImpl()
+file_stream_service = FileStreamDomainServiceImpl()
 job_method_finder_service = JobMethodFinderDomainServiceImpl(timeout=5)
+auth_service = AuthServiceImpl(user_repo)
 
 oauth2_scheme = HTTPBearer()
 ctx_timeout = 10.0
