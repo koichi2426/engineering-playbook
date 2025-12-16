@@ -30,10 +30,9 @@ backend/
 ```
 src/
 ├─ domain/               # 1. ドメイン層（純粋なビジネスルール）
-│  ├─ entities/          # エンティティ（クラスを実装）: user.py, agent.py など
+│  ├─ entities/          # エンティティ（クラスを実装）+ リポジトリIF: user.py, agent.py など
 │  ├─ value_objects/     # 値オブジェクト（クラスを実装）: email.py, id.py など
-│  ├─ services/          # ドメインサービス（インターフェース）
-│  └─ repositories/      # リポジトリ（インターフェース）
+│  └─ services/          # ドメインサービス（インターフェース）
 ├─ usecase/              # 2. ユースケース層（操作フロー）
 │  ├─ auth_login.py
 │  └─ create_agent.py    # ほか機能ごとに追加
@@ -54,7 +53,7 @@ src/
 
 * `src/domain/` (ドメイン層)
     - 責務: 純粋なビジネスルール
-    - 内容: `entities/`, `value_objects/`, `services/`(ロジックIF), `repositories/`(永続化IF)
+    - 内容: `entities/`(エンティティ+リポジトリIF), `value_objects/`, `services/`(ロジックIF)
 * `src/usecase/` (ユースケース層)
     - 責務: アプリケーション固有のロジック
     - 内容: 具体的な操作フローを実装。`domain`層のインターフェースにのみ依存
@@ -105,26 +104,135 @@ class DeploymentMethods:
 
 1.  **エンティティ / 値オブジェクトの定義:**
     * 必要に応じて`src/domain/entities/agent.py`や`src/domain/value_objects/`に、純粋なPythonクラスとしてエンティティや値オブジェクトを定義（または更新）します。
+
+**コード例 (値オブジェクト: `domain/value_objects/id.py`):**
+```python
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class ID:
+    """シンプルな ID 値オブジェクトラッパー（整数型）"""
+    value: int
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.value, int):
+            raise TypeError(f"ID.value must be int, got {type(self.value).__name__}")
+        if self.value < 0:
+            raise ValueError("ID.value must be non-negative")
+
+    def __str__(self) -> str:
+        return str(self.value)
+```
+
+**コード例 (エンティティとリポジトリ: `domain/entities/agent.py`):**
+```python
+import abc
+from dataclasses import dataclass
+from typing import Optional
+
+from ..value_objects.id import ID
+
+
+@dataclass
+class Agent:
+    id: ID
+    user_id: ID
+    owner: str
+    name: str
+    description: Optional[str]
+
+
+class AgentRepository(abc.ABC):
+    @abc.abstractmethod
+    def create(self, agent: Agent) -> Agent:
+        """エージェントを作成して返す"""
+        pass
+
+    @abc.abstractmethod
+    def find_by_id(self, agent_id: ID) -> Optional[Agent]:
+        """IDからエージェントを検索する"""
+        pass
+
+    @abc.abstractmethod
+    def list_by_user_id(self, user_id: ID) -> list[Agent]:
+        """指定ユーザーのエージェント一覧を取得する"""
+        pass
+
+    @abc.abstractmethod
+    def find_all(self) -> list[Agent]:
+        """すべてのエージェントを取得する"""
+        pass
+
+    @abc.abstractmethod
+    def update(self, agent: Agent) -> None:
+        """エージェント情報を更新する"""
+        pass
+
+    @abc.abstractmethod
+    def delete(self, agent_id: ID) -> None:
+        """IDでエージェントを削除する"""
+        pass
+
+
+def NewAgent(
+    id: int, user_id: int, owner: str, name: str, description: Optional[str]
+) -> Agent:
+    """Agentエンティティを生成するファクトリ関数"""
+    return Agent(
+        id=ID(id),
+        user_id=ID(user_id),
+        owner=owner,
+        name=name,
+        description=description,
+    )
+```
+
 2.  **ドメインサービス・インターフェースの定義:**
     * エンティティや値オブジェクトに当てはまらないビジネスロジックは、`src/domain/services/`にドメインサービスとして定義します。
     * 例: 複数のエンティティにまたがる処理、外部との連携ロジックなど。
     * 命名規則: `[ドメインサービスの名前]_service.py`（例: `auth_service.py`, `notification_service.py`）
+
+**コード例 (ドメインサービス: `domain/services/deployment_test_service.py`):**
+```python
+import abc
+from typing import Protocol
+
+from domain.value_objects.file_data import UploadedFileStream 
+from domain.value_objects.deployment_test_result import DeploymentTestResult 
+
+    
+class DeploymentTestDomainService(Protocol):
+    """
+    デプロイされた推論エンジンに対するテスト実行ロジックを
+    カプセル化するドメインサービスインターフェース。
+    """
+    
+    @abc.abstractmethod
+    async def run_batch_inference_test(
+        self, 
+        test_file: UploadedFileStream,
+        endpoint_url: str,
+    ) -> DeploymentTestResult: 
+        """
+        テストデータファイルの内容を解析し、外部エンドポイントに対し
+        並列でリクエストを発行し、最終的な評価結果V.O.を返す。
+        
+        Args:
+            test_file: テストデータファイル。
+            endpoint_url: 推論を行うデプロイメントの完全なエンドポイントURL。
+            
+        Returns:
+            DeploymentTestResult: テスト実行の最終結果を含むV.O.。
+        """
+        ...
+```
+
 3.  **リポジトリ・インターフェースの定義:**
-    * `src/domain/repositories/agent_repository.py`に、`IAgentRepository`というインターフェース（ABC: 抽象基底クラス）を定義します。
+    * リポジトリインターフェースは、**対応するエンティティと同じファイル内に定義**します（例: `domain/entities/agent.py`に`Agent`と`AgentRepository`の両方を定義）。
     * リポジトリで定義するメソッドは **CRUD操作のみ** です: **Create（作成）**、**Read（読み取り）**、**Update（更新）**、**Delete（削除）**
     * 例: `create`, `find_by_id`, `find_all`, `update`, `delete`
-
-**コード例 (`IAgentRepository`):**
-```python
-from abc import ABC, abstractmethod
-from src.domain.entities.agent import Agent
-
-class IAgentRepository(ABC):
-
-    @abstractmethod
-    def create(self, agent: Agent) -> Agent:
-        pass
-```
+    * 上記の`Agent`と`AgentRepository`のコード例を参照してください。
 
 ### Step 2: ユースケース層 (src/usecase/)
 
@@ -137,28 +245,132 @@ class IAgentRepository(ABC):
 
 1.  **ユースケースの作成:**
       * `src/usecase/create_agent.py`を作成します。
-      * `CreateAgentUseCase`クラスを定義します。
+      * 以下の要素を定義します:
+        - **Usecaseインターフェース** (`CreateAgentUseCase` Protocol)
+        - **Input DTO** (`CreateAgentInput`)
+        - **Output DTO** (`CreateAgentOutput`)
+        - **Presenterインターフェース** (`CreateAgentPresenter`)
+        - **Interactor（実装クラス）** (`CreateAgentInteractor`)
+        - **ファクトリ関数** (`new_create_agent_interactor`)
 2.  **依存性の注入 (DI):**
-      * コンストラクタ（`__init__`）で、Step 1で定義した**インターフェース**（`IAgentRepository`など）を受け取ります。
-      * **注意:** `infrastructure`層の具体的な実装（`AgentRepositoryImpl`など）に依存してはいけません。
+      * Interactorのコンストラクタ（`__init__`）で、Step 1で定義した**インターフェース**（リポジトリ、ドメインサービスなど）とPresenterを受け取ります。
+      * **注意:** `infrastructure`層の具体的な実装に依存してはいけません。
 
 **コード例 (`create_agent.py`):**
 
 ```python
-from src.domain.repositories.agent_repository import IAgentRepository
-from src.domain.entities.agent import Agent
+import abc
+from dataclasses import dataclass
+from typing import Protocol, Tuple, Optional
 
-class CreateAgentUseCase:
-    def __init__(self, agent_repo: IAgentRepository):
+from domain.entities.agent import Agent, AgentRepository
+from domain.services.auth_service import AuthDomainService
+from domain.value_objects.id import ID
+
+
+# ======================================
+# Usecaseのインターフェース定義（Protocol）
+# ======================================
+class CreateAgentUseCase(Protocol):
+    def execute(
+        self, input: "CreateAgentInput"
+    ) -> Tuple["CreateAgentOutput", Exception | None]:
+        ...
+
+
+# ======================================
+# Input DTO
+# ======================================
+@dataclass
+class CreateAgentInput:
+    token: str
+    name: str
+    description: Optional[str]
+
+
+# ======================================
+# Output DTO
+# ======================================
+@dataclass
+class CreateAgentOutput:
+    id: int
+    user_id: int
+    owner: str
+    name: str
+    description: Optional[str]
+
+
+# ======================================
+# Presenterのインターフェース定義
+# ======================================
+class CreateAgentPresenter(abc.ABC):
+    @abc.abstractmethod
+    def output(self, agent: Agent) -> CreateAgentOutput:
+        pass
+
+
+# ======================================
+# Usecaseの具体的な実装（Interactor）
+# ======================================
+class CreateAgentInteractor:
+    def __init__(
+        self,
+        presenter: CreateAgentPresenter,
+        agent_repo: AgentRepository,
+        auth_service: AuthDomainService,
+        timeout_sec: int = 10,
+    ):
+        self.presenter = presenter
         self.agent_repo = agent_repo
+        self.auth_service = auth_service
+        self.timeout_sec = timeout_sec
 
-    def execute(self, name: str, description: str) -> Agent:
-        # ドメインのロジックを呼び出し
-        new_agent = Agent(name=name, description=description)
-        
-        # インターフェースを介して永続化
-        created_agent = self.agent_repo.create(new_agent)
-        return created_agent
+    def execute(
+        self, input: CreateAgentInput
+    ) -> Tuple[CreateAgentOutput, Exception | None]:
+        try:
+            # トークンを検証してユーザー情報を取得
+            user = self.auth_service.verify_token(input.token)
+
+            # Agentエンティティを生成
+            agent_to_create = Agent(
+                id=ID(0),  # IDはDBで自動採番される
+                user_id=user.id,
+                owner=user.username,
+                name=input.name,
+                description=input.description,
+            )
+
+            # リポジトリに永続化を委譲
+            created_agent = self.agent_repo.create(agent_to_create)
+
+            # Presenterに渡してOutput DTOに変換
+            output = self.presenter.output(created_agent)
+            return output, None
+            
+        except Exception as e:
+            # エラー時は空のDTOと例外を返す
+            empty_output = CreateAgentOutput(
+                id=0, user_id=0, owner="", name="", description=""
+            )
+            return empty_output, e
+
+
+# ======================================
+# Usecaseインスタンスを生成するファクトリ関数
+# ======================================
+def new_create_agent_interactor(
+    presenter: CreateAgentPresenter,
+    agent_repo: AgentRepository,
+    auth_service: AuthDomainService,
+    timeout_sec: int = 10,
+) -> CreateAgentUseCase:
+    return CreateAgentInteractor(
+        presenter=presenter,
+        agent_repo=agent_repo,
+        auth_service=auth_service,
+        timeout_sec=timeout_sec,
+    )
 ```
 
 ### Step 3: インフラ層 (src/infrastructure/) - 実装
