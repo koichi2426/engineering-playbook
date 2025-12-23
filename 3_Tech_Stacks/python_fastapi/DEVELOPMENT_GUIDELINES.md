@@ -950,11 +950,11 @@ def new_create_agent_presenter() -> CreateAgentPresenter:
 
 ### Step 5: インフラ層 (src/infrastructure/) - 接続
 
-**責務:** すべての部品を「接続」し、FastAPIエンドポイントとして公開します。
+**責務:** すべての部品を「接続」し、FastAPIエンドポイントとして公開します。この層はアプリケーションの **Composition Root** であり、依存関係をまとめて構築する場所です。専用のDIコンテナは使わず、ルーターモジュールで **手動DI（Pure DI）** を行います。
 
 1.  **ルーター内での依存解決（簡易DI）:**
-      * `src/infrastructure/router/fastapi.py`内で、設定読み込み（`NewMySQLConfigFromEnv`）→リポジトリ/サービスのインスタンス化→ユースケース/コントローラーの生成を行います。
-      * これにより、専用DIコンテナなしでルーターファイルに依存関係を集約できます。
+    * `src/infrastructure/router/fastapi.py`内で、設定読み込み（`NewMySQLConfigFromEnv`）→リポジトリ/サービスのインスタンス化→ユースケース/コントローラーの生成を行います。
+    * これにより、専用DIコンテナなしでルーターファイルに依存関係を集約できます。
 
 **雛形 (`infrastructure/router/fastapi.py`):**
 
@@ -974,6 +974,7 @@ from usecase.create_agent import CreateAgentInput, new_create_agent_interactor
 
 router = APIRouter()
 oauth2_scheme = HTTPBearer()
+# 依存オブジェクト（Repository/Service）の生成: アプリ起動時に一度だけ実行し、各リクエストで共有
 db_config = NewMySQLConfigFromEnv()
 agent_repo = MySQLAgentRepository(db_config)
 auth_service = AuthServiceImpl(secret_key="<replace-with-secret>")
@@ -981,6 +982,7 @@ ctx_timeout = 10.0
 
 def build_create_agent_controller() -> CreateAgentController:
     presenter = new_create_agent_presenter()
+    # Usecaseへの依存性の注入: presenterと起動時生成済みのrepo/serviceを束ねる
     usecase = new_create_agent_interactor(presenter, agent_repo, auth_service, ctx_timeout)
     return CreateAgentController(usecase)
 
@@ -1107,7 +1109,7 @@ def create_agent(request: CreateAgentRequest, credentials: HTTPAuthorizationCred
 上記パターンを踏襲して、Auth（signup/login/me）、Agent（一覧/作成/全件）、Finetuning Job（作成/一覧/可視化）、Deployment（作成/取得/メソッド取得・設定/テスト）、ファイルストリーム（画像可視化の配信）などのルートを同様に構築します。
 
 補足:
-- 依存の共有/生成方針は「リポジトリ/サービスは原則共有、Presenter/Usecase/Controllerは各リクエストで生成」。
+- 依存の共有/生成方針は「リポジトリ/サービスはモジュールロード（アプリ起動）時に生成して共有、Presenter/Usecase/Controllerは各リクエストでファクトリ生成して注入」。
 - `httpx.AsyncClient` はアプリ終了時に`aclose()`が必要。Lifespan管理や`startup/shutdown`イベントでクリーンアップする設計を推奨。
 - `response_model` には Adapter層の Output DTO を指定し、FastAPIによるスキーマ公開を活用。
 - 大規模化したら、ルーターを複数モジュールに分割して`app.include_router()`で統合。
