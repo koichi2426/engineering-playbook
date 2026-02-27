@@ -4,27 +4,26 @@
 
 ## 目次
 
-* [プロジェクト構成 概要](https://www.google.com/search?q=%23%E3%83%97%E3%83%AD%E3%82%B8%E3%82%A7%E3%82%AF%E3%83%88%E6%A7%8B%E6%88%90-%E6%A6%82%E8%A6%81)
-* [1 フォルダ構成 ルート](https://www.google.com/search?q=%231-%E3%83%95%E3%82%A9%E3%83%AB%E3%83%80%E6%A7%8B%E6%88%90-%E3%83%AB%E3%83%BC%E3%83%88)
-* [2 フォルダ構成 src](https://www.google.com/search?q=%232-%E3%83%95%E3%82%A9%E3%83%AB%E3%83%80%E6%A7%8B%E6%88%90-src)
-* [3 各ディレクトリの責務 src](https://www.google.com/search?q=%233-%E5%90%84%E3%83%87%E3%82%A3%E3%83%AC%E3%82%AF%E3%83%88%E3%83%AA%E3%81%AE%E8%B2%AC%E5%8B%99-src)
 
+* [プロジェクト構成 概要](#プロジェクト構成-概要)
+* [1 フォルダ構成 ルート](#1-フォルダ構成-ルート)
+* [2 フォルダ構成 src](#2-フォルダ構成-src)
+* [3 各ディレクトリの責務 src](#3-各ディレクトリの責務-src)
 
-* [新規APIの追加手順 ガイド](https://www.google.com/search?q=%23%E6%96%B0%E8%A6%8Fapi%E3%81%AE%E8%BF%BD%E5%8A%A0%E6%89%8B%E9%A0%86-%E3%82%AC%E3%82%A4%E3%83%89)
-* [実装前のチェック AI向け](https://www.google.com/search?q=%23%E5%AE%9F%E8%A3%85%E5%89%8D%E3%81%AE%E3%83%81%E3%82%A7%E3%83%83%E3%82%AF-ai%E5%90%91%E3%81%91)
-* [Step 1 ドメイン層 src domain](https://www.google.com/search?q=%23step-1-%E3%83%89%E3%83%A1%E3%82%A4%E3%83%B3%E5%B1%A4-src-domain)
-* [Step 2 ユースケース層 src usecase](https://www.google.com/search?q=%23step-2-%E3%83%A6%E3%83%BC%E3%82%B9%E3%82%B1%E3%83%BC%E3%82%B9%E5%B1%A4-src-usecase)
-* [Step 3 インフラ層 実装 src infrastructure](https://www.google.com/search?q=%23step-3-%E3%82%A4%E3%83%B3%E3%83%95%E3%83%A9%E5%B1%A4-%E5%AE%9F%E8%A3%85-src-infrastructure)
-* [Step 4 アダプタ層 翻訳 src adapter](https://www.google.com/search?q=%23step-4-%E3%82%A2%E3%83%80%E3%83%97%E3%82%BF%E5%B1%A4-%E7%BF%BB%E8%A8%B3-src-adapter)
-* [Step 5 インフラ層 接続 src infrastructure](https://www.google.com/search?q=%23step-5-%E3%82%A4%E3%83%B3%E3%83%95%E3%83%A9%E5%B1%A4-%E6%8E%A5%E7%B6%9A-src-infrastructure)
-* [Step 6 起動ファイル src main go](https://www.google.com/search?q=%23step-6-%E8%B5%B7%E5%8B%95%E3%83%95%E3%82%A1%E3%82%A4%E3%83%AB-src-main-go)
+* [新規APIの追加手順 ガイド](#新規apiの追加手順-ガイド)
+* [実装前のチェック AI向け](#実装前のチェック-ai向け)
+* [step-1-ドメイン層-src-domain](#step-1-ドメイン層-src-domain)
+* [step-2-ユースケース層-src-usecase](#step-2-ユースケース層-src-usecase)
+* [step-3-インフラ層-実装-src-infrastructure](#step-3-インフラ層-実装-src-infrastructure)
+* [step-4-アダプタ層-翻訳-src-adapter](#step-4-アダプタ層-翻訳-src-adapter)
+* [step-5-インフラ層-接続-src-infrastructure](#step-5-インフラ層-接続-src-infrastructure)
+* [step-6-起動ファイル-src-main-go](#step-6-起動ファイル-src-main-go)
 
-
-* [テスト設計と実装ガイドライン](https://www.google.com/search?q=%23%E3%83%86%E3%82%B9%E3%83%88%E8%A8%AD%E8%A8%88%E3%81%A8%E5%AE%9F%E8%A3%85%E3%82%AC%E3%82%A4%E3%83%89%E3%83%A9%E3%82%A4%E3%83%B3)
-* [1 テストフォルダ構成](https://www.google.com/search?q=%231-%E3%83%86%E3%82%B9%E3%83%88%E3%83%95%E3%82%A9%E3%83%AB%E3%83%80%E6%A7%8B%E6%88%90)
-* [2 テスト環境とルール](https://www.google.com/search?q=%232-%E3%83%86%E3%82%B9%E3%83%88%E7%92%B0%E5%A2%83%E3%81%A8%E3%83%AB%E3%83%BC%E3%83%AB)
-* [3 各層のテスト実装テンプレート](https://www.google.com/search?q=%233-%E5%90%84%E5%B1%A4%E3%81%AE%E3%83%86%E3%82%B9%E3%83%88%E5%AE%9F%E8%A3%85%E3%83%86%E3%83%B3%E3%83%97%E3%83%AC%E3%83%BC%E3%83%88)
-* [4 実行方法](https://www.google.com/search?q=%234-%E5%AE%9F%E8%A1%8C%E6%96%B9%E6%B3%95)
+* [テスト設計と実装ガイドライン](#テスト設計と実装ガイドライン)
+* [1-テストフォルダ構成](#1-テストフォルダ構成)
+* [2-テスト環境とルール](#2-テスト環境とルール)
+* [3-各層のテスト実装テンプレート](#3-各層のテスト実装テンプレート)
+* [4-実行方法](#4-実行方法)
 
 
 
