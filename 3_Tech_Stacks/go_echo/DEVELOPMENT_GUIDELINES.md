@@ -5,25 +5,26 @@
 ## 目次
 
 
+
 * [プロジェクト構成 概要](#プロジェクト構成-概要)
-* [1 フォルダ構成 ルート](#1-フォルダ構成-ルート)
-* [2 フォルダ構成 src](#2-フォルダ構成-src)
-* [3 各ディレクトリの責務 src](#3-各ディレクトリの責務-src)
+	* [1 フォルダ構成 ルート](#1-フォルダ構成-ルート)
+	* [2 フォルダ構成 src](#2-フォルダ構成-src)
+	* [3 各ディレクトリの責務 src](#3-各ディレクトリの責務-src)
 
 * [新規APIの追加手順 ガイド](#新規apiの追加手順-ガイド)
-* [実装前のチェック AI向け](#実装前のチェック-ai向け)
-* [step-1-ドメイン層-src-domain](#step-1-ドメイン層-src-domain)
-* [step-2-ユースケース層-src-usecase](#step-2-ユースケース層-src-usecase)
-* [step-3-インフラ層-実装-src-infrastructure](#step-3-インフラ層-実装-src-infrastructure)
-* [step-4-アダプタ層-翻訳-src-adapter](#step-4-アダプタ層-翻訳-src-adapter)
-* [step-5-インフラ層-接続-src-infrastructure](#step-5-インフラ層-接続-src-infrastructure)
-* [step-6-起動ファイル-src-main-go](#step-6-起動ファイル-src-main-go)
+	* [実装前のチェック AI向け](#実装前のチェック-ai向け)
+	* [step-1-ドメイン層-src-domain](#step-1-ドメイン層-src-domain)
+	* [step-2-ユースケース層-src-usecase](#step-2-ユースケース層-src-usecase)
+	* [step-3-インフラ層-実装-src-infrastructure](#step-3-インフラ層-実装-src-infrastructure)
+	* [step-4-アダプタ層-翻訳-src-adapter](#step-4-アダプタ層-翻訳-src-adapter)
+	* [step-5-インフラ層-接続-src-infrastructure](#step-5-インフラ層-接続-src-infrastructure)
+	* [step-6-起動ファイル-src-main-go](#step-6-起動ファイル-src-main-go)
 
 * [テスト設計と実装ガイドライン](#テスト設計と実装ガイドライン)
-* [1-テストフォルダ構成](#1-テストフォルダ構成)
-* [2-テスト環境とルール](#2-テスト環境とルール)
-* [3-各層のテスト実装テンプレート](#3-各層のテスト実装テンプレート)
-* [4-実行方法](#4-実行方法)
+	* [1-テストフォルダ構成](#1-テストフォルダ構成)
+	* [2-テスト環境とルール](#2-テスト環境とルール)
+	* [3-各層のテスト実装テンプレート](#3-各層のテスト実装テンプレート)
+	* [4-実行方法](#4-実行方法)
 
 
 
