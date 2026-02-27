@@ -1,42 +1,48 @@
-# GoとEchoとAtlasによるプロジェクト構成と開発ガイドライン
+# プロジェクト構成と開発ガイドライン Go Echo Atlas版
 
-このドキュメントはフォルダ構成や新規API追加の標準的な開発手順を1つにまとめたものです。クリーンアーキテクチャの4層に基づき配置場所と手順の両方をここで参照できます。
+このドキュメントはフォルダ構成と新規API追加の標準的な開発手順を1つにまとめたものです。クリーンアーキテクチャの4層に基づき配置場所と手順の両方をここで参照できます。以前の内容をより詳細に、かつGoエコシステムに合わせた完全版として再構築しました。
 
 ## 目次
 
 * [プロジェクト構成の概要](https://www.google.com/search?q=%23%E3%83%97%E3%83%AD%E3%82%B8%E3%82%A7%E3%82%AF%E3%83%88%E6%A7%8B%E6%88%90%E3%81%AE%E6%A6%82%E8%A6%81)
-* [ルートディレクトリのフォルダ構成](https://www.google.com/search?q=%23%E3%83%AB%E3%83%BC%E3%83%88%E3%83%87%E3%82%A3%E3%83%AC%E3%82%AF%E3%83%88%E3%83%AA%E3%81%AE%E3%83%95%E3%82%A9%E3%83%AB%E3%83%80%E6%A7%8B%E6%88%90)
-* [srcディレクトリのフォルダ構成](https://www.google.com/search?q=%23src%E3%83%87%E3%82%A3%E3%83%AC%E3%82%AF%E3%83%88%E3%83%AA%E3%81%AE%E3%83%95%E3%82%A9%E3%83%AB%E3%83%80%E6%A7%8B%E6%88%90)
-* [srcディレクトリの各責務](https://www.google.com/search?q=%23src%E3%83%87%E3%82%A3%E3%83%AC%E3%82%AF%E3%83%88%E3%83%AA%E3%81%AE%E5%90%84%E8%B2%AC%E5%8B%99)
+* [ルートのフォルダ構成](https://www.google.com/search?q=%23%E3%83%AB%E3%83%BC%E3%83%88%E3%81%AE%E3%83%95%E3%82%A9%E3%83%AB%E3%83%80%E6%A7%8B%E6%88%90)
+* [src配下のフォルダ構成](https://www.google.com/search?q=%23src%E9%85%8D%E4%B8%8B%E3%81%AE%E3%83%95%E3%82%A9%E3%83%AB%E3%83%80%E6%A7%8B%E6%88%90)
+* [各ディレクトリの責務](https://www.google.com/search?q=%23%E5%90%84%E3%83%87%E3%82%A3%E3%83%AC%E3%82%AF%E3%83%88%E3%83%AA%E3%81%AE%E8%B2%AC%E5%8B%99)
 
 
-* [新規APIの追加手順ガイド](https://www.google.com/search?q=%23%E6%96%B0%E8%A6%8Fapi%E3%81%AE%E8%BF%BD%E5%8A%A0%E6%89%8B%E9%A0%86%E3%82%AC%E3%82%A4%E3%83%89)
+* [新規APIの追加手順](https://www.google.com/search?q=%23%E6%96%B0%E8%A6%8Fapi%E3%81%AE%E8%BF%BD%E5%8A%A0%E6%89%8B%E9%A0%86)
 * [AI向けの実装前チェック](https://www.google.com/search?q=%23ai%E5%90%91%E3%81%91%E3%81%AE%E5%AE%9F%E8%A3%85%E5%89%8D%E3%83%81%E3%82%A7%E3%83%83%E3%82%AF)
 * [Step 1: ドメイン層](https://www.google.com/search?q=%23step-1-%E3%83%89%E3%83%A1%E3%82%A4%E3%83%B3%E5%B1%A4)
 * [Step 2: ユースケース層](https://www.google.com/search?q=%23step-2-%E3%83%A6%E3%83%BC%E3%82%B9%E3%82%B1%E3%83%BC%E3%82%B9%E5%B1%A4)
 * [Step 3: インフラ層の実装](https://www.google.com/search?q=%23step-3-%E3%82%A4%E3%83%B3%E3%83%95%E3%83%A9%E5%B1%A4%E3%81%AE%E5%AE%9F%E8%A3%85)
-* [Step 4: アダプタ層の翻訳](https://www.google.com/search?q=%23step-4-%E3%82%A2%E3%83%80%E3%83%97%E3%82%BF%E5%B1%A4%E3%81%AE%E7%BF%BB%E8%A8%B3)
+* [Step 4: アダプタ層](https://www.google.com/search?q=%23step-4-%E3%82%A2%E3%83%80%E3%83%97%E3%82%BF%E5%B1%A4)
 * [Step 5: インフラ層の接続](https://www.google.com/search?q=%23step-5-%E3%82%A4%E3%83%B3%E3%83%95%E3%83%A9%E5%B1%A4%E3%81%AE%E6%8E%A5%E7%B6%9A)
 * [Step 6: 起動ファイル](https://www.google.com/search?q=%23step-6-%E8%B5%B7%E5%8B%95%E3%83%95%E3%82%A1%E3%82%A4%E3%83%AB)
 
 
 * [テスト設計と実装ガイドライン](https://www.google.com/search?q=%23%E3%83%86%E3%82%B9%E3%83%88%E8%A8%AD%E8%A8%88%E3%81%A8%E5%AE%9F%E8%A3%85%E3%82%AC%E3%82%A4%E3%83%89%E3%83%A9%E3%82%A4%E3%83%B3)
+* [テストフォルダ構成](https://www.google.com/search?q=%23%E3%83%86%E3%82%B9%E3%83%88%E3%83%95%E3%82%A9%E3%83%AB%E3%83%80%E6%A7%8B%E6%88%90)
+* [テスト環境とルール](https://www.google.com/search?q=%23%E3%83%86%E3%82%B9%E3%83%88%E7%92%B0%E5%A2%83%E3%81%A8%E3%83%AB%E3%83%BC%E3%83%AB)
+* [各層のテスト実装テンプレート](https://www.google.com/search?q=%23%E5%90%84%E5%B1%A4%E3%81%AE%E3%83%86%E3%82%B9%E3%83%88%E5%AE%9F%E8%A3%85%E3%83%86%E3%83%B3%E3%83%97%E3%83%AC%E3%83%BC%E3%83%88)
+* [実行方法](https://www.google.com/search?q=%23%E5%AE%9F%E8%A1%8C%E6%96%B9%E6%B3%95)
+
+
 
 ---
 
 ## プロジェクト構成の概要
 
-この構成はクリーンアーキテクチャの4層の責務に基づいています。
+この構成はクリーンアーキテクチャで定義した4層の責務に基づいています。
 
-注意書きとしてAI実装向けのガイドラインを示します。
+AI実装向けガイドラインの注意
 
 * このドキュメントのコード例は雛形かつ参照用です。要求にない機能や抽象化や汎用化は一切追加しないでください。
 * 実装は最小限のスコープで行います。ルート、DTO、Presenter、Usecase、Repository、Serviceのうちタスク達成に必要な部分だけを作成および編集します。
-* 依存関係はレイヤ原則に厳密に従います。UsecaseはDomainのみに依存しInfrastructureやAdapterの具体実装へ直接依存してはいけません。
-* 例の名称や構造は参考でありプロジェクトの既存命名や配置に優先度があります。既存と矛盾する場合既存に合わせます。
+* 依存関係はレイヤ原則に厳密に従います。UsecaseはDomainのみに依存し、InfrastructureやAdapterの具体実装へ直接依存してはいけません。
+* 例の名称や構造は参考でありプロジェクトの既存命名や配置に優先度があります。既存と矛盾する場合は既存に合わせます。
 * 追加でユーティリティ、共通化、設定項目、例外階層などを広げないでください。必要性が明確でユーザーが依頼した場合のみ追加します。
 
-### ルートディレクトリのフォルダ構成
+### ルートのフォルダ構成
 
 階層が一目で分かるように整形したツリー表示です。
 
@@ -52,45 +58,46 @@ backend/
 
 ```
 
-推奨するDockerfileの内容を示します。Goアプリケーションのコンテナ化に使用します。
+推奨するDockerfileの内容を示します。マルチステージビルドを使用してコンテナを軽量化します。
 
 ```dockerfile
-# ビルド環境
+# ビルドステージ
 FROM golang:1.22-alpine AS builder
 
 WORKDIR /app
 
+# 依存関係のダウンロード
 COPY go.mod go.sum ./
 RUN go mod download
 
+# ソースコードのコピーとビルド
 COPY . .
-# バイナリのビルド
-RUN go build -o main ./src/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -o main ./src/main.go
 
-# 実行環境
-FROM alpine:latest
+# 実行ステージ
+FROM gcr.io/distroless/static-debian12
 
 WORKDIR /app
 
 COPY --from=builder /app/main .
 COPY --from=builder /app/.env* ./
 
+# Echoのデフォルトポート
 EXPOSE 8000
 
-CMD ["./main"]
+CMD ["/app/main"]
 
 ```
 
-補足事項です。
+補足事項
 
 * go.modはbackend直下に配置します。
-* コンテナ起動時に実行されるバイナリはsrc/main.goをビルドしたものです。
-* YAMLの構成ファイルは本プロジェクトでは不要です。単一コンテナ起動を前提とします。
-* データベースのマイグレーションはAtlasを使用しmigrationsディレクトリで管理します。
+* メインパッケージはsrc/main.goに配置し、ビルドしてコンテナ内で実行します。
+* DBマイグレーションはアプリケーション起動時ではなく、Atlas CLIを用いてCIおよびCDパイプラインまたはローカル環境から独立して実行します。
 
-### srcディレクトリのフォルダ構成
+### src配下のフォルダ構成
 
-ツリー表示です。Goのパッケージ構成に合わせています。
+Goのパッケージ構成の慣例に合わせたツリー表示です。
 
 ```text
 src/
@@ -100,70 +107,70 @@ src/
 │  │  └─ agent.go
 │  ├─ value_objects/
 │  │  ├─ id.go
-│  │  ├─ email.go
 │  │  └─ file_data.go
 │  └─ services/
-│     ├─ auth_domain_service.go
-│     └─ file_storage_domain_service.go
+│     └─ auth_domain_service.go
 ├─ usecase/
 │  ├─ auth_login.go
 │  └─ create_agent.go
 ├─ adapter/
 │  ├─ controller/
+│  │  └─ create_agent_controller.go
 │  └─ presenter/
+│     └─ create_agent_presenter.go
 ├─ infrastructure/
 │  ├─ database/
 │  │  ├─ mysql/
 │  │  │  ├─ config.go
-│  │  │  ├─ agent_repository.go
-│  │  │  └─ user_repository.go
+│  │  │  ├─ db.go
+│  │  │  └─ agent_repository.go
 │  ├─ router/
 │  │  └─ echo.go
 │  └─ storage/
-│     └─ s3/
+│     └─ s3_client.go
 └─ main.go
 
 ```
 
-### srcディレクトリの各責務
+### 各ディレクトリの責務
 
-src/domain/ はドメイン層です。
+src/domain/
 
 * 責務: 純粋なビジネスルール
-* 内容: entitiesディレクトリには構造体とリポジトリインターフェースを配置します。value_objectsディレクトリには値オブジェクトを配置します。servicesディレクトリにはドメインサービスのインターフェースを配置します。
+* 内容: entitiesディレクトリには構造体とリポジトリインターフェースを定義します。value_objectsディレクトリにはIDやファイルストリームなどの値オブジェクトを定義します。servicesディレクトリにはドメインサービスのインターフェースを配置します。
 
-src/usecase/ はユースケース層です。
+src/usecase/
 
 * 責務: アプリケーション固有のロジック
-* 内容: 具体的な操作フローを実装します。domain層の定義にのみ依存します。
+* 内容: 具体的な操作フローを実装します。domain層のインターフェースや構造体にのみ依存します。
 
-src/adapter/ はアダプタ層です。
+src/adapter/
 
 * 責務: 外部のHTTPリクエストと内部のUsecaseの翻訳
-* 内容: controllerとpresenterを配置します。
+* 内容: controllerはEchoのコンテキストを受け取りUsecaseへ渡します。presenterはUsecaseの結果をHTTPレスポンス用の構造体に変換します。
 
-src/infrastructure/ はインフラ層です。
+src/infrastructure/
 
 * 責務: 外部技術とdomainインターフェースの具体実装
-* 内容: databaseディレクトリには各DB技術のリポジトリ実装を配置します。routerディレクトリにはEchoによるルーティングを配置します。storageディレクトリにはファイルストレージクライアントなどを配置します。
+* 内容: database配下には各DB技術のリポジトリ実装を配置します。routerにはEchoによるルーティング設定を配置します。
 
-src/main.go は起動ファイルです。
+src/main.go
 
-* 責務: アプリケーションの起動
-* 内容: infrastructure/router/echo.goで定義したEchoインスタンスを起動します。
+* 責務: アプリケーションの起動と依存関係の注入
+* 内容: DB接続の初期化、ルーターの設定、Echoサーバーの起動を行います。
 
 ---
 
-## 新規APIの追加手順ガイド
+## 新規APIの追加手順
 
 新しいエージェントを作成するAPIを追加する手順をステップバイステップで示します。
 
 ### AI向けの実装前チェック
 
 * 要件を一文で明確化します。
-* 既存のファイルや命名パターンを優先し雛形を必要最小限で適用します。
+* 既存のファイルや命名パターンを優先し、雛形を必要最小限で適用します。
 * 依頼にない層や機能は追加しません。
-* 依存制約を確認します。UsecaseはDomainのみに依存します。AdapterはUsecaseに依存します。InfraはDomainのインターフェースに依存します。
+* 依存制約を確認します。
 * 既存テストや動作に影響する広範囲の変更は避けます。
 
 ### Step 1: ドメイン層
@@ -192,7 +199,7 @@ func (id ID) Value() int {
 
 ```
 
-エンティティとリポジトリインターフェースの定義例である domain/entities/agent.go を示します。
+エンティティとリポジトリインターフェースの定義例である domain/entities/agent.go を示します。インターフェースはそれを利用する構造体と同じパッケージに配置するのがGoの慣例です。
 
 ```go
 package entities
@@ -239,11 +246,27 @@ type AgentRepository interface {
 
 ```
 
+ドメインサービスのインターフェース例である domain/services/auth_domain_service.go を示します。
+
+```go
+package services
+
+import (
+	"context"
+	"src/domain/entities"
+)
+
+type AuthDomainService interface {
+	VerifyToken(ctx context.Context, token string) (*entities.User, error)
+}
+
+```
+
 ### Step 2: ユースケース層
 
 責務はアプリケーション固有のロジック実装です。ドメイン層のオブジェクトのみを使用します。
 
-ユースケースの定義例である usecase/create_agent.go を示します。
+ユースケースの定義例である usecase/create_agent.go を示します。入出力のDTOと、操作を実行するインターフェースおよび実装を含みます。
 
 ```go
 package usecase
@@ -353,7 +376,7 @@ func (c *Config) DSN() string {
 
 ```
 
-リポジトリ実装の例である infrastructure/database/mysql/agent_repository.go を示します。
+リポジトリ実装の例である infrastructure/database/mysql/agent_repository.go を示します。database/sql パッケージを使用します。
 
 ```go
 package mysql
@@ -389,7 +412,6 @@ func (r *agentRepository) Create(ctx context.Context, agent *entities.Agent) (*e
 }
 
 func (r *agentRepository) FindByID(ctx context.Context, id value_objects.ID) (*entities.Agent, error) {
-	// 実装は省略しますが標準的な database/sql の処理を記述します
 	return nil, nil
 }
 
@@ -407,11 +429,11 @@ func (r *agentRepository) Delete(ctx context.Context, id value_objects.ID) error
 
 ```
 
-### Step 4: アダプタ層の翻訳
+### Step 4: アダプタ層
 
-責務はHTTPリクエストとユースケース層の翻訳です。
+責務はHTTPリクエストとユースケース層の翻訳です。Echoフレームワークの機能を利用します。
 
-コントローラーの例である adapter/controller/create_agent_controller.go を示します。Echoのコンテキストを使用します。
+コントローラーの例である adapter/controller/create_agent_controller.go を示します。
 
 ```go
 package controller
@@ -504,7 +526,7 @@ import (
 	"src/adapter/controller"
 	"src/adapter/presenter"
 	"src/infrastructure/database/mysql"
-	"src/infrastructure/services_impl"
+	"src/infrastructure/services"
 	"src/usecase"
 
 	"github.com/labstack/echo/v4"
@@ -512,7 +534,7 @@ import (
 
 func InitRoutes(e *echo.Echo, db *sql.DB) {
 	agentRepo := mysql.NewAgentRepository(db)
-	authService := services_impl.NewAuthServiceImpl()
+	authService := services.NewAuthServiceImpl()
 
 	createAgentPresenter := presenter.NewCreateAgentPresenter()
 	createAgentUsecase := usecase.NewCreateAgentInteractor(createAgentPresenter, agentRepo, authService)
@@ -526,7 +548,7 @@ func InitRoutes(e *echo.Echo, db *sql.DB) {
 
 ### Step 6: 起動ファイル
 
-責務はアプリケーション起動時にEchoインスタンスを初期化し全体を統合することです。
+責務はアプリケーション起動時にDB接続とEchoインスタンスを初期化し全体を統合することです。
 
 メインファイルの例である src/main.go を示します。
 
@@ -551,6 +573,10 @@ func main() {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 	defer db.Close()
+
+	if err := db.Ping(); err != nil {
+		log.Fatalf("Failed to ping database: %v", err)
+	}
 
 	e := echo.New()
 
@@ -578,9 +604,9 @@ func main() {
 
 Go言語における標準的なテスト手法に従いテストの責務を分離します。
 
-### テスト配置のルール
+### テストフォルダ構成
 
-Goでは単体テストはテスト対象のファイルと同じディレクトリに配置します。ファイル名の末尾を _test.go とします。統合テストはルートディレクトリ直下に tests ディレクトリを作成しそこに配置します。
+Goの規約に従い、単体テストはテスト対象のファイルと同じディレクトリに配置し、ファイル名の末尾を _test.go とします。統合テストは tests ディレクトリに分離します。
 
 ```text
 src/
@@ -596,9 +622,37 @@ tests/
 
 ```
 
-### 単体テストの実装例
+### テスト環境とルール
 
-ユースケースのテストではモックを使用します。Goではインターフェースを利用して手動でモック構造体を作成するかgomockなどのツールを利用します。
+標準パッケージの testing を基本とし、必要に応じてモック生成ツールである gomock や testify などのアサーションライブラリを導入します。テストデータ生成やDBリセット処理は各統合テストのSetup関数内で定義します。
+
+### 各層のテスト実装テンプレート
+
+ドメイン層の単体テスト
+DB接続は行わず構造体や関数のロジックを検証します。
+
+```go
+package entities_test
+
+import (
+	"src/domain/entities"
+	"testing"
+)
+
+func TestNewAgent_Valid(t *testing.T) {
+	agent, err := entities.NewAgent(1, 100, "test_user", "MyAgent", "desc")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if agent.Name != "MyAgent" {
+		t.Errorf("expected MyAgent, got %s", agent.Name)
+	}
+}
+
+```
+
+ユースケース層の単体テスト
+すべての依存リポジトリやサービスをモック化してビジネスフローを検証します。
 
 ```go
 package usecase_test
@@ -620,19 +674,51 @@ func (m *mockAgentRepository) Create(ctx context.Context, agent *entities.Agent)
 
 func TestCreateAgentInteractor_Execute(t *testing.T) {
 	repo := &mockAgentRepository{}
-	// presenterとauthServiceのモックも同様に作成し注入します
-	// 実行結果を検証するアサーションを記述します
+	// authServiceやpresenterのモックも定義して注入します
+	// 依存関係を設定した上でExecuteを呼び出し戻り値を検証します
 }
 
 ```
 
-### 統合テストの実行
+インフラ層の統合テスト
+テスト用のDBを立ち上げAtlas等でスキーマを適用した状態に対してテストを実行します。
 
-統合テストは実際のデータベースが必要です。Atlasを使用してテスト用データベースのスキーマを同期したうえでテストを実行します。
+```go
+package mysql_test
 
-すべてのテストを実行するコマンドです。
+import (
+	"context"
+	"database/sql"
+	"src/domain/entities"
+	"src/infrastructure/database/mysql"
+	"testing"
+)
+
+func TestAgentRepository_Create(t *testing.T) {
+	// dbはテストセットアップで初期化された接続を使用します
+	repo := mysql.NewAgentRepository(testDB)
+	
+	agent, _ := entities.NewAgent(0, 1, "owner", "RepoTest", "desc")
+	created, err := repo.Create(context.Background(), agent)
+	
+	if err != nil {
+		t.Fatalf("failed to create agent: %v", err)
+	}
+	if created.ID.Value() == 0 {
+		t.Error("expected non-zero ID")
+	}
+}
+
+```
+
+### 実行方法
+
+Goの標準テストコマンドを使用します。
 
 ```bash
-go test ./...
+go test ./src/...           # 単体テストのみ実行
+go test ./tests/...         # 統合テストのみ実行
+go test -v ./...            # 詳細出力ありですべて実行
+go test -run TestNewAgent   # 特定のテストを指定して実行
 
 ```
