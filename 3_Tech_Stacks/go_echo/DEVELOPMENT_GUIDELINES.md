@@ -1,48 +1,48 @@
-# プロジェクト構成と開発ガイドライン Go Echo Atlas版
+# プロジェクト構成と開発ガイドライン Go Echo Atlas
 
-このドキュメントはフォルダ構成と新規API追加の標準的な開発手順を1つにまとめたものです。クリーンアーキテクチャの4層に基づき配置場所と手順の両方をここで参照できます。以前の内容をより詳細に、かつGoエコシステムに合わせた完全版として再構築しました。
+このドキュメントは、フォルダ構成 What/Where と新規API追加の標準的な開発手順 How を1つにまとめたものです。クリーンアーキテクチャの4層に基づき、配置場所と手順の両方をここで参照できます。
 
 ## 目次
 
-* [プロジェクト構成の概要](https://www.google.com/search?q=%23%E3%83%97%E3%83%AD%E3%82%B8%E3%82%A7%E3%82%AF%E3%83%88%E6%A7%8B%E6%88%90%E3%81%AE%E6%A6%82%E8%A6%81)
-* [ルートのフォルダ構成](https://www.google.com/search?q=%23%E3%83%AB%E3%83%BC%E3%83%88%E3%81%AE%E3%83%95%E3%82%A9%E3%83%AB%E3%83%80%E6%A7%8B%E6%88%90)
-* [src配下のフォルダ構成](https://www.google.com/search?q=%23src%E9%85%8D%E4%B8%8B%E3%81%AE%E3%83%95%E3%82%A9%E3%83%AB%E3%83%80%E6%A7%8B%E6%88%90)
-* [各ディレクトリの責務](https://www.google.com/search?q=%23%E5%90%84%E3%83%87%E3%82%A3%E3%83%AC%E3%82%AF%E3%83%88%E3%83%AA%E3%81%AE%E8%B2%AC%E5%8B%99)
+* [プロジェクト構成 概要](https://www.google.com/search?q=%23%E3%83%97%E3%83%AD%E3%82%B8%E3%82%A7%E3%82%AF%E3%83%88%E6%A7%8B%E6%88%90-%E6%A6%82%E8%A6%81)
+* [1 フォルダ構成 ルート](https://www.google.com/search?q=%231-%E3%83%95%E3%82%A9%E3%83%AB%E3%83%80%E6%A7%8B%E6%88%90-%E3%83%AB%E3%83%BC%E3%83%88)
+* [2 フォルダ構成 src](https://www.google.com/search?q=%232-%E3%83%95%E3%82%A9%E3%83%AB%E3%83%80%E6%A7%8B%E6%88%90-src)
+* [3 各ディレクトリの責務 src](https://www.google.com/search?q=%233-%E5%90%84%E3%83%87%E3%82%A3%E3%83%AC%E3%82%AF%E3%83%88%E3%83%AA%E3%81%AE%E8%B2%AC%E5%8B%99-src)
 
 
-* [新規APIの追加手順](https://www.google.com/search?q=%23%E6%96%B0%E8%A6%8Fapi%E3%81%AE%E8%BF%BD%E5%8A%A0%E6%89%8B%E9%A0%86)
-* [AI向けの実装前チェック](https://www.google.com/search?q=%23ai%E5%90%91%E3%81%91%E3%81%AE%E5%AE%9F%E8%A3%85%E5%89%8D%E3%83%81%E3%82%A7%E3%83%83%E3%82%AF)
-* [Step 1: ドメイン層](https://www.google.com/search?q=%23step-1-%E3%83%89%E3%83%A1%E3%82%A4%E3%83%B3%E5%B1%A4)
-* [Step 2: ユースケース層](https://www.google.com/search?q=%23step-2-%E3%83%A6%E3%83%BC%E3%82%B9%E3%82%B1%E3%83%BC%E3%82%B9%E5%B1%A4)
-* [Step 3: インフラ層の実装](https://www.google.com/search?q=%23step-3-%E3%82%A4%E3%83%B3%E3%83%95%E3%83%A9%E5%B1%A4%E3%81%AE%E5%AE%9F%E8%A3%85)
-* [Step 4: アダプタ層](https://www.google.com/search?q=%23step-4-%E3%82%A2%E3%83%80%E3%83%97%E3%82%BF%E5%B1%A4)
-* [Step 5: インフラ層の接続](https://www.google.com/search?q=%23step-5-%E3%82%A4%E3%83%B3%E3%83%95%E3%83%A9%E5%B1%A4%E3%81%AE%E6%8E%A5%E7%B6%9A)
-* [Step 6: 起動ファイル](https://www.google.com/search?q=%23step-6-%E8%B5%B7%E5%8B%95%E3%83%95%E3%82%A1%E3%82%A4%E3%83%AB)
+* [新規APIの追加手順 ガイド](https://www.google.com/search?q=%23%E6%96%B0%E8%A6%8Fapi%E3%81%AE%E8%BF%BD%E5%8A%A0%E6%89%8B%E9%A0%86-%E3%82%AC%E3%82%A4%E3%83%89)
+* [実装前のチェック AI向け](https://www.google.com/search?q=%23%E5%AE%9F%E8%A3%85%E5%89%8D%E3%81%AE%E3%83%81%E3%82%A7%E3%83%83%E3%82%AF-ai%E5%90%91%E3%81%91)
+* [Step 1 ドメイン層 src domain](https://www.google.com/search?q=%23step-1-%E3%83%89%E3%83%A1%E3%82%A4%E3%83%B3%E5%B1%A4-src-domain)
+* [Step 2 ユースケース層 src usecase](https://www.google.com/search?q=%23step-2-%E3%83%A6%E3%83%BC%E3%82%B9%E3%82%B1%E3%83%BC%E3%82%B9%E5%B1%A4-src-usecase)
+* [Step 3 インフラ層 実装 src infrastructure](https://www.google.com/search?q=%23step-3-%E3%82%A4%E3%83%B3%E3%83%95%E3%83%A9%E5%B1%A4-%E5%AE%9F%E8%A3%85-src-infrastructure)
+* [Step 4 アダプタ層 翻訳 src adapter](https://www.google.com/search?q=%23step-4-%E3%82%A2%E3%83%80%E3%83%97%E3%82%BF%E5%B1%A4-%E7%BF%BB%E8%A8%B3-src-adapter)
+* [Step 5 インフラ層 接続 src infrastructure](https://www.google.com/search?q=%23step-5-%E3%82%A4%E3%83%B3%E3%83%95%E3%83%A9%E5%B1%A4-%E6%8E%A5%E7%B6%9A-src-infrastructure)
+* [Step 6 起動ファイル src main go](https://www.google.com/search?q=%23step-6-%E8%B5%B7%E5%8B%95%E3%83%95%E3%82%A1%E3%82%A4%E3%83%AB-src-main-go)
 
 
 * [テスト設計と実装ガイドライン](https://www.google.com/search?q=%23%E3%83%86%E3%82%B9%E3%83%88%E8%A8%AD%E8%A8%88%E3%81%A8%E5%AE%9F%E8%A3%85%E3%82%AC%E3%82%A4%E3%83%89%E3%83%A9%E3%82%A4%E3%83%B3)
-* [テストフォルダ構成](https://www.google.com/search?q=%23%E3%83%86%E3%82%B9%E3%83%88%E3%83%95%E3%82%A9%E3%83%AB%E3%83%80%E6%A7%8B%E6%88%90)
-* [テスト環境とルール](https://www.google.com/search?q=%23%E3%83%86%E3%82%B9%E3%83%88%E7%92%B0%E5%A2%83%E3%81%A8%E3%83%AB%E3%83%BC%E3%83%AB)
-* [各層のテスト実装テンプレート](https://www.google.com/search?q=%23%E5%90%84%E5%B1%A4%E3%81%AE%E3%83%86%E3%82%B9%E3%83%88%E5%AE%9F%E8%A3%85%E3%83%86%E3%83%B3%E3%83%97%E3%83%AC%E3%83%BC%E3%83%88)
-* [実行方法](https://www.google.com/search?q=%23%E5%AE%9F%E8%A1%8C%E6%96%B9%E6%B3%95)
+* [1 テストフォルダ構成](https://www.google.com/search?q=%231-%E3%83%86%E3%82%B9%E3%83%88%E3%83%95%E3%82%A9%E3%83%AB%E3%83%80%E6%A7%8B%E6%88%90)
+* [2 テスト環境とルール](https://www.google.com/search?q=%232-%E3%83%86%E3%82%B9%E3%83%88%E7%92%B0%E5%A2%83%E3%81%A8%E3%83%AB%E3%83%BC%E3%83%AB)
+* [3 各層のテスト実装テンプレート](https://www.google.com/search?q=%233-%E5%90%84%E5%B1%A4%E3%81%AE%E3%83%86%E3%82%B9%E3%83%88%E5%AE%9F%E8%A3%85%E3%83%86%E3%83%B3%E3%83%97%E3%83%AC%E3%83%BC%E3%83%88)
+* [4 実行方法](https://www.google.com/search?q=%234-%E5%AE%9F%E8%A1%8C%E6%96%B9%E6%B3%95)
 
 
 
 ---
 
-## プロジェクト構成の概要
+## プロジェクト構成 概要
 
-この構成はクリーンアーキテクチャで定義した4層の責務に基づいています。
+この構成は、クリーンアーキテクチャで定義した4層の責務に基づいています。
 
-AI実装向けガイドラインの注意
+注意 AI実装向けガイドライン
 
 * このドキュメントのコード例は雛形かつ参照用です。要求にない機能や抽象化や汎用化は一切追加しないでください。
-* 実装は最小限のスコープで行います。ルート、DTO、Presenter、Usecase、Repository、Serviceのうちタスク達成に必要な部分だけを作成および編集します。
+* 実装は最小限のスコープで行います。ルート、DTO、Presenter、Usecase、Repository、Serviceのうち、タスク達成に必要な部分だけを作成および編集します。
 * 依存関係はレイヤ原則に厳密に従います。UsecaseはDomainのみに依存し、InfrastructureやAdapterの具体実装へ直接依存してはいけません。
-* 例の名称や構造は参考でありプロジェクトの既存命名や配置に優先度があります。既存と矛盾する場合は既存に合わせます。
+* 例の名称や構造は参考であり、プロジェクトの既存命名や配置に優先度があります。既存と矛盾する場合、既存に合わせます。
 * 追加でユーティリティ、共通化、設定項目、例外階層などを広げないでください。必要性が明確でユーザーが依頼した場合のみ追加します。
 
-### ルートのフォルダ構成
+### 1 フォルダ構成 ルート
 
 階層が一目で分かるように整形したツリー表示です。
 
@@ -58,126 +58,150 @@ backend/
 
 ```
 
-推奨するDockerfileの内容を示します。マルチステージビルドを使用してコンテナを軽量化します。
+Goアプリケーションのコンテナ化に使用する backend/Dockerfile は次の内容を推奨します。マルチステージビルドを使用してコンテナを軽量化します。
 
 ```dockerfile
-# ビルドステージ
+# ビルド環境
 FROM golang:1.22-alpine AS builder
 
 WORKDIR /app
 
-# 依存関係のダウンロード
+# 環境変数を設定
+ENV CGO_ENABLED=0 \
+    GOOS=linux \
+    GOARCH=amd64
+
+# 依存ライブラリのリストをコピーしてダウンロード
 COPY go.mod go.sum ./
 RUN go mod download
 
-# ソースコードのコピーとビルド
+# アプリケーションのコードをコピー
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o main ./src/main.go
 
-# 実行ステージ
-FROM gcr.io/distroless/static-debian12
+# バイナリのビルド
+RUN go build -o main ./src/main.go
+
+# 実行環境 軽量なdistrolessまたはalpineを使用
+FROM alpine:latest
 
 WORKDIR /app
 
+# ビルドしたバイナリをコピー
 COPY --from=builder /app/main .
 COPY --from=builder /app/.env* ./
 
-# Echoのデフォルトポート
+# コンテナ起動時にAPIサーバーを実行
 EXPOSE 8000
-
-CMD ["/app/main"]
+CMD ["./main"]
 
 ```
 
-補足事項
+補足
 
-* go.modはbackend直下に配置します。
-* メインパッケージはsrc/main.goに配置し、ビルドしてコンテナ内で実行します。
-* DBマイグレーションはアプリケーション起動時ではなく、Atlas CLIを用いてCIおよびCDパイプラインまたはローカル環境から独立して実行します。
+* go.mod は backend/ 直下に配置します。
+* コンテナ起動時に実行されるバイナリは src/main.go をビルドしたものです。
+* ローカル開発では air などのホットリロードツールを使用することがありますが、本番コンテナではコンパイル済みバイナリを直接実行します。
+* データベースのマイグレーションはAtlasを使用し migrations/ ディレクトリで管理します。
 
-### src配下のフォルダ構成
+### 2 フォルダ構成 src
 
-Goのパッケージ構成の慣例に合わせたツリー表示です。
+ツリー表示です。Goのパッケージ構成に合わせています。
 
 ```text
 src/
-├─ domain/
-│  ├─ entities/
+├─ domain/               # 1 ドメイン層 純粋なビジネスルール
+│  ├─ entities/          # エンティティ 構造体 と リポジトリインターフェース
 │  │  ├─ user.go
 │  │  └─ agent.go
-│  ├─ value_objects/
+│  ├─ value_objects/     # 値オブジェクト
 │  │  ├─ id.go
+│  │  ├─ email.go
 │  │  └─ file_data.go
-│  └─ services/
-│     └─ auth_domain_service.go
-├─ usecase/
+│  └─ services/          # ドメインサービスインターフェース
+│     ├─ auth_domain_service.go
+│     └─ file_storage_domain_service.go
+├─ usecase/              # 2 ユースケース層 操作フロー
 │  ├─ auth_login.go
-│  └─ create_agent.go
-├─ adapter/
-│  ├─ controller/
-│  │  └─ create_agent_controller.go
-│  └─ presenter/
-│     └─ create_agent_presenter.go
-├─ infrastructure/
-│  ├─ database/
-│  │  ├─ mysql/
+│  └─ create_agent.go    # ほか機能ごとに追加
+├─ adapter/              # 3 アダプタ層 翻訳
+│  ├─ controller/        # HTTPからUsecase入力へ
+│  └─ presenter/         # Usecase出力からHTTPレスポンスへ
+├─ infrastructure/       # 4 インフラ層 具体実装と外部技術
+│  ├─ database/          # DB接続設定 各種DB技術
+│  │  ├─ mysql/          # MySQLリポジトリ実装 各フォルダ直下に必ず config.go
 │  │  │  ├─ config.go
-│  │  │  ├─ db.go
-│  │  │  └─ agent_repository.go
-│  ├─ router/
+│  │  │  ├─ agent_repository.go
+│  │  │  └─ user_repository.go
+│  │  └─ redis/          # Redisキャッシュ実装 例 config.go 必須
+│  ├─ router/            # Echoルーティング簡易DIもここで
 │  │  └─ echo.go
-│  └─ storage/
-│     └─ s3_client.go
-└─ main.go
+│  └─ storage/           # 外部ストレージクライアント 各フォルダに config.go 推奨
+│     └─ s3/             # AWS S3クライアント実装
+└─ main.go               # アプリケーション起動ファイル エントリーポイント
 
 ```
 
-### 各ディレクトリの責務
+注意 エンティティと値オブジェクトの実装配置について
+Goではインターフェースと実装を明確に分けることができます。ドメイン層には純粋な構造体とインターフェースのみを配置し、特定のフレームワーク echo.Context や multipart.FileHeader など に依存するコードは絶対に含めないでください。
 
-src/domain/
+### 3 各ディレクトリの責務 src
 
-* 責務: 純粋なビジネスルール
-* 内容: entitiesディレクトリには構造体とリポジトリインターフェースを定義します。value_objectsディレクトリにはIDやファイルストリームなどの値オブジェクトを定義します。servicesディレクトリにはドメインサービスのインターフェースを配置します。
+* src/domain/ ドメイン層
+* 責務 純粋なビジネスルール
+* 内容
+* entities/ エンティティ構造体とリポジトリインターフェースを同じファイルまたはディレクトリに配置
+* value_objects/ 値オブジェクト構造体とバリデーションロジック
+* services/ ドメインサービスのインターフェース
 
-src/usecase/
 
-* 責務: アプリケーション固有のロジック
-* 内容: 具体的な操作フローを実装します。domain層のインターフェースや構造体にのみ依存します。
 
-src/adapter/
 
-* 責務: 外部のHTTPリクエストと内部のUsecaseの翻訳
-* 内容: controllerはEchoのコンテキストを受け取りUsecaseへ渡します。presenterはUsecaseの結果をHTTPレスポンス用の構造体に変換します。
+* src/usecase/ ユースケース層
+* 責務 アプリケーション固有のロジック
+* 内容 具体的な操作フローを実装します。domain層のインターフェースや構造体にのみ依存します。
 
-src/infrastructure/
 
-* 責務: 外部技術とdomainインターフェースの具体実装
-* 内容: database配下には各DB技術のリポジトリ実装を配置します。routerにはEchoによるルーティング設定を配置します。
+* src/adapter/ アダプタ層
+* 責務 外部のHTTPリクエストと内部のUsecaseの翻訳
+* 内容 controllerはEchoのコンテキストを受け取りUsecaseへ渡します。presenterはUsecaseの結果をHTTPレスポンス用の構造体に変換します。
 
-src/main.go
 
-* 責務: アプリケーションの起動と依存関係の注入
-* 内容: DB接続の初期化、ルーターの設定、Echoサーバーの起動を行います。
+* src/infrastructure/ インフラ層
+* 責務 外部技術とdomainインターフェースの具体実装
+* 内容 database配下には各DB技術のリポジトリ実装を配置します。routerにはEchoによるルーティング設定を配置します。
+
+
+* src/main.go
+* 責務 アプリケーションの起動と依存関係の注入
+* 内容 DB接続の初期化、ルーターの設定、Echoサーバーの起動を行います。
+
+
 
 ---
 
-## 新規APIの追加手順
+## 新規APIの追加手順 ガイド
 
-新しいエージェントを作成するAPIを追加する手順をステップバイステップで示します。
+ここでは例として新しいエージェント Agent を作成するAPIを追加する手順をステップバイステップで示します。
 
-### AI向けの実装前チェック
+### 実装前のチェック AI向け
 
-* 要件を一文で明確化します。
+* 要件を一文で明確化します 何を追加や変更するか。
 * 既存のファイルや命名パターンを優先し、雛形を必要最小限で適用します。
-* 依頼にない層や機能は追加しません。
-* 依存制約を確認します。
+* 依頼にない層や機能は追加しません 例 追加のサービス、共通ユーティリティ、設定拡張。
+* 依存制約を確認します UsecaseからDomainのみ。AdapterはUsecaseに、InfraはDomainのインターフェースに。
 * 既存テストや動作に影響する広範囲の変更は避けます。
 
-### Step 1: ドメイン層
+### Step 1 ドメイン層 src domain
 
-責務はビジネスルールのインターフェース定義です。外部ライブラリへの依存を避け標準パッケージのみ使用します。
+責務 ビジネスルール 何ができるか のインターフェースと構造体を定義します。
 
-値オブジェクトの定義例である domain/value_objects/id.go を示します。
+使用可能なライブラリ
+ドメイン層では外部ライブラリへの依存を避け、Goの標準パッケージ errors context time など のみを使用します。
+
+1 エンティティと値オブジェクトの定義
+必要に応じて src/domain/entities/agent.go や src/domain/value_objects/ に、純粋なGoの構造体としてエンティティや値オブジェクトを定義または更新します。
+
+コード例 値オブジェクト domain/value_objects/id.go
 
 ```go
 package value_objects
@@ -199,7 +223,7 @@ func (id ID) Value() int {
 
 ```
 
-エンティティとリポジトリインターフェースの定義例である domain/entities/agent.go を示します。インターフェースはそれを利用する構造体と同じパッケージに配置するのがGoの慣例です。
+コード例 エンティティとリポジトリ domain/entities/agent.go
 
 ```go
 package entities
@@ -246,7 +270,13 @@ type AgentRepository interface {
 
 ```
 
-ドメインサービスのインターフェース例である domain/services/auth_domain_service.go を示します。
+注意 Repositoryの実装範囲
+CRUD以外のメソッド 検索条件の複雑化、集計、ページングユーティリティ等 は、明示的な要求がない限り追加しません。
+
+2 ドメインサービス インターフェースの定義
+エンティティや値オブジェクトに当てはまらないビジネスロジックは、 src/domain/services/ にドメインサービスとして定義します。
+
+コード例 ドメインサービス domain/services/auth_domain_service.go
 
 ```go
 package services
@@ -262,11 +292,17 @@ type AuthDomainService interface {
 
 ```
 
-### Step 2: ユースケース層
+### Step 2 ユースケース層 src usecase
 
-責務はアプリケーション固有のロジック実装です。ドメイン層のオブジェクトのみを使用します。
+責務 アプリケーション固有のロジック どういう流れで実行するか を実装します。
 
-ユースケースの定義例である usecase/create_agent.go を示します。入出力のDTOと、操作を実行するインターフェースおよび実装を含みます。
+依存関係の原則
+ユースケース層はドメイン層のオブジェクトのみを使用してコードを書きます。infrastructureやadapter、外部ライブラリには依存しません。
+
+1 ユースケースの作成
+src/usecase/create_agent.go を作成します。入力DTO、出力DTO、Presenterインターフェース、Usecaseインターフェース、そして実装となるInteractor構造体を定義します。
+
+コード例 create_agent.go
 
 ```go
 package usecase
@@ -338,11 +374,14 @@ func (i *createAgentInteractor) Execute(ctx context.Context, input CreateAgentIn
 
 ```
 
-### Step 3: インフラ層の実装
+### Step 3 インフラ層 実装 src infrastructure
 
-責務はドメイン層で定義されたインターフェースの具体的な実装です。
+責務 domain層で定義されたインターフェースの具体的な実装を行います。
 
-データベース設定の例である infrastructure/database/mysql/config.go を示します。
+1 データベース設定 config.go
+各データストアフォルダの直下に config.go を配置します。
+
+コード例 MySQL設定 infrastructure/database/mysql/config.go
 
 ```go
 package mysql
@@ -376,7 +415,10 @@ func (c *Config) DSN() string {
 
 ```
 
-リポジトリ実装の例である infrastructure/database/mysql/agent_repository.go を示します。database/sql パッケージを使用します。
+2 リポジトリの実装
+エンティティパッケージ内で定義したリポジトリインターフェースを実装する構造体を定義します。
+
+コード例 リポジトリ実装 infrastructure/database/mysql/agent_repository.go
 
 ```go
 package mysql
@@ -429,11 +471,14 @@ func (r *agentRepository) Delete(ctx context.Context, id value_objects.ID) error
 
 ```
 
-### Step 4: アダプタ層
+### Step 4 アダプタ層 翻訳 src adapter
 
-責務はHTTPリクエストとユースケース層の翻訳です。Echoフレームワークの機能を利用します。
+責務 HTTPリクエストとユースケース層の翻訳を行います。Echoの機能はここで使います。
 
-コントローラーの例である adapter/controller/create_agent_controller.go を示します。
+1 コントローラーの作成
+src/adapter/controller/create_agent_controller.go を作成します。
+
+コード例 コントローラー adapter/controller/create_agent_controller.go
 
 ```go
 package controller
@@ -484,7 +529,10 @@ func (ctrl *CreateAgentController) Execute(c echo.Context) error {
 
 ```
 
-プレゼンターの例である adapter/presenter/create_agent_presenter.go を示します。
+2 プレゼンターの作成
+src/adapter/presenter/create_agent_presenter.go を作成します。
+
+コード例 プレゼンター adapter/presenter/create_agent_presenter.go
 
 ```go
 package presenter
@@ -512,11 +560,11 @@ func (p *createAgentPresenter) Output(agent *entities.Agent) *usecase.CreateAgen
 
 ```
 
-### Step 5: インフラ層の接続
+### Step 5 インフラ層 接続 src infrastructure
 
-責務はすべての部品を接続しEchoエンドポイントとして公開することです。手動での依存性の注入を行います。
+責務 すべての部品を接続し、Echoエンドポイントとして公開します。手動DIを行います。
 
-ルーターの例である infrastructure/router/echo.go を示します。
+コード例 ルーター infrastructure/router/echo.go
 
 ```go
 package router
@@ -534,7 +582,8 @@ import (
 
 func InitRoutes(e *echo.Echo, db *sql.DB) {
 	agentRepo := mysql.NewAgentRepository(db)
-	authService := services.NewAuthServiceImpl()
+	
+	authService := services.NewAuthServiceImpl() 
 
 	createAgentPresenter := presenter.NewCreateAgentPresenter()
 	createAgentUsecase := usecase.NewCreateAgentInteractor(createAgentPresenter, agentRepo, authService)
@@ -546,11 +595,11 @@ func InitRoutes(e *echo.Echo, db *sql.DB) {
 
 ```
 
-### Step 6: 起動ファイル
+### Step 6 起動ファイル src main go
 
-責務はアプリケーション起動時にDB接続とEchoインスタンスを初期化し全体を統合することです。
+責務 アプリケーション起動時にDB接続とEchoインスタンスを初期化し、全体を統合します。
 
-メインファイルの例である src/main.go を示します。
+コード例 起動ファイル src/main.go
 
 ```go
 package main
@@ -602,9 +651,9 @@ func main() {
 
 ## テスト設計と実装ガイドライン
 
-Go言語における標準的なテスト手法に従いテストの責務を分離します。
+Go言語における標準的なテスト手法に従い、クリーンアーキテクチャの階層構造に基づいてテストの責務を分離します。
 
-### テストフォルダ構成
+### 1 テストフォルダ構成
 
 Goの規約に従い、単体テストはテスト対象のファイルと同じディレクトリに配置し、ファイル名の末尾を _test.go とします。統合テストは tests ディレクトリに分離します。
 
@@ -622,13 +671,13 @@ tests/
 
 ```
 
-### テスト環境とルール
+### 2 テスト環境とルール
 
 標準パッケージの testing を基本とし、必要に応じてモック生成ツールである gomock や testify などのアサーションライブラリを導入します。テストデータ生成やDBリセット処理は各統合テストのSetup関数内で定義します。
 
-### 各層のテスト実装テンプレート
+### 3 各層のテスト実装テンプレート
 
-ドメイン層の単体テスト
+A ドメイン層の単体テスト
 DB接続は行わず構造体や関数のロジックを検証します。
 
 ```go
@@ -651,7 +700,7 @@ func TestNewAgent_Valid(t *testing.T) {
 
 ```
 
-ユースケース層の単体テスト
+B ユースケース層の単体テスト
 すべての依存リポジトリやサービスをモック化してビジネスフローを検証します。
 
 ```go
@@ -674,13 +723,14 @@ func (m *mockAgentRepository) Create(ctx context.Context, agent *entities.Agent)
 
 func TestCreateAgentInteractor_Execute(t *testing.T) {
 	repo := &mockAgentRepository{}
+	
 	// authServiceやpresenterのモックも定義して注入します
 	// 依存関係を設定した上でExecuteを呼び出し戻り値を検証します
 }
 
 ```
 
-インフラ層の統合テスト
+C インフラ層の統合テスト
 テスト用のDBを立ち上げAtlas等でスキーマを適用した状態に対してテストを実行します。
 
 ```go
@@ -711,14 +761,21 @@ func TestAgentRepository_Create(t *testing.T) {
 
 ```
 
-### 実行方法
+### 4 実行方法
 
 Goの標準テストコマンドを使用します。
 
 ```bash
-go test ./src/...           # 単体テストのみ実行
-go test ./tests/...         # 統合テストのみ実行
-go test -v ./...            # 詳細出力ありですべて実行
-go test -run TestNewAgent   # 特定のテストを指定して実行
+# 単体テストのみ実行
+go test ./src/...           
+
+# 統合テストのみ実行
+go test ./tests/...         
+
+# 詳細出力ありですべて実行
+go test -v ./...            
+
+# 特定のテストを指定して実行
+go test -run TestNewAgent   
 
 ```
