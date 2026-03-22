@@ -1,805 +1,485 @@
-# プロジェクト構成と開発ガイドライン Go Echo Atlas
+# Reso Backend 実装固定仕様書（AI開発テンプレート）
 
-このドキュメントは、フォルダ構成 What/Where と新規API追加の標準的な開発手順 How を1つにまとめたものです。クリーンアーキテクチャの4層に基づき、配置場所と手順の両方をここで参照できます。
+この文書は、Reso_backend のバックエンド開発を AI に実行させるための固定仕様です。
+目的は「実装の揺れをなくすこと」です。
 
-## 目次
-
-
-* [プロジェクト構成 概要](#プロジェクト構成-概要)
-    * [1 フォルダ構成 ルート](#1-フォルダ構成-ルート)
-    * [2 フォルダ構成 src](#2-フォルダ構成-src)
-    * [3 各ディレクトリの責務 src](#3-各ディレクトリの責務-src)
-
-* [新規APIの追加手順 ガイド](#新規apiの追加手順-ガイド)
-    * [実装前のチェック AI向け](#実装前のチェック-ai向け)
-    * [Step 1 ドメイン層 src domain](#step-1-ドメイン層-src-domain)
-    * [Step 2 ユースケース層 src usecase](#step-2-ユースケース層-src-usecase)
-    * [Step 3 インフラ層 実装 src infrastructure](#step-3-インフラ層-実装-src-infrastructure)
-    * [Step 4 アダプタ層 翻訳 src adapter](#step-4-アダプタ層-翻訳-src-adapter)
-    * [Step 5 インフラ層 接続 src infrastructure](#step-5-インフラ層-接続-src-infrastructure)
-    * [Step 6 起動ファイル src main go](#step-6-起動ファイル-src-main-go)
-
-* [テスト設計と実装ガイドライン](#テスト設計と実装ガイドライン)
-    * [1 テストフォルダ構成](#1-テストフォルダ構成)
-    * [2 テスト環境とルール](#2-テスト環境とルール)
-    * [3 各層のテスト実装テンプレート](#3-各層のテスト実装テンプレート)
-    * [4 実行方法](#4-実行方法)
+- この仕様書のキーワード `MUST` は必須です。
+- この仕様書のキーワード `MUST NOT` は禁止です。
+- 明記されていない最適化・抽象化・拡張は `MUST NOT` です。
 
 ---
 
-## プロジェクト構成 概要
+## 1. プロジェクト前提（固定）
 
-この構成は、クリーンアーキテクチャで定義した4層の責務に基づいています。
+- 言語: Go
+- モジュール: `app`
+- HTTP フレームワーク: Echo v4
+- DB: PostgreSQL + PostGIS
+- マイグレーション: Atlas
+- アーキテクチャ: Clean Architecture（Domain / Usecase / Adapter / Infrastructure）
 
-注意 AI実装向けガイドライン
-
-* このドキュメントのコード例は雛形かつ参照用です。要求にない機能や抽象化や汎用化は一切追加しないでください。
-* 実装は最小限のスコープで行います。ルート、DTO、Presenter、Usecase、Repository、Serviceのうち、タスク達成に必要な部分だけを作成および編集します。
-* 依存関係はレイヤ原則に厳密に従います。UsecaseはDomainのみに依存し、InfrastructureやAdapterの具体実装へ直接依存してはいけません。
-* 例の名称や構造は参考であり、プロジェクトの既存命名や配置に優先度があります。既存と矛盾する場合、既存に合わせます。
-* 追加でユーティリティ、共通化、設定項目、例外階層などを広げないでください。必要性が明確でユーザーが依頼した場合のみ追加します。
-
-### 1 フォルダ構成 ルート
-
-階層が一目で分かるように整形したツリー表示です。
+ルート構成（固定）:
 
 ```text
-backend/
-├─ Dockerfile
-├─ .env.example
-├─ go.mod
-├─ go.sum
-├─ atlas.hcl              # Atlas設定ファイル
-├─ migrations/            # AtlasによるDBマイグレーションディレクトリ
-└─ src/                   # すべてのアプリケーションコード
-
-
-```
-
-Goアプリケーションのコンテナ化に使用する backend/Dockerfile は次の内容を推奨します。マルチステージビルドを使用してコンテナを軽量化します。
-
-```dockerfile
-# ビルド環境
-FROM golang:1.22-alpine AS builder
-
-WORKDIR /app
-
-# 環境変数を設定
-ENV CGO_ENABLED=0 \
-    GOOS=linux \
-    GOARCH=amd64
-
-# 依存ライブラリのリストをコピーしてダウンロード
-COPY go.mod go.sum ./
-RUN go mod download
-
-# アプリケーションのコードをコピー
-COPY . .
-
-# バイナリのビルド
-RUN go build -o main ./src/main.go
-
-# 実行環境 軽量なdistrolessまたはalpineを使用
-FROM alpine:latest
-
-WORKDIR /app
-
-# ビルドしたバイナリをコピー
-COPY --from=builder /app/main .
-COPY --from=builder /app/.env* ./
-
-# コンテナ起動時にAPIサーバーを実行
-EXPOSE 8000
-CMD ["./main"]
-
-
-```
-
-補足
-
-* go.mod は backend/ 直下に配置します。
-* コンテナ起動時に実行されるバイナリは src/main.go をビルドしたものです。
-* ローカル開発では air などのホットリロードツールを使用することがありますが、本番コンテナではコンパイル済みバイナリを直接実行します。
-* データベースのマイグレーションはAtlasを使用し migrations/ ディレクトリで管理します。
-
-### 2 フォルダ構成 src
-
-ツリー表示です。Goのパッケージ構成に合わせています。
-
-```text
-src/
-├─ domain/               # 1 ドメイン層 純粋なビジネスルール
-│  ├─ entities/          # エンティティ 構造体 と リポジトリインターフェース
-│  │  ├─ user.go
-│  │  └─ agent.go
-│  ├─ value_objects/     # 値オブジェクト
-│  │  ├─ id.go
-│  │  ├─ email.go
-│  │  └─ file_data.go
-│  └─ services/          # ドメインサービスインターフェース
-│     ├─ auth_domain_service.go
-│     └─ file_storage_domain_service.go
-├─ usecase/              # 2 ユースケース層 操作フロー
-│  ├─ auth_login.go
-│  └─ create_agent.go    # ほか機能ごとに追加
-├─ adapter/              # 3 アダプタ層 翻訳
-│  ├─ controller/        # HTTPからUsecase入力へ
-│  └─ presenter/         # Usecase出力からHTTPレスポンスへ
-├─ infrastructure/       # 4 インフラ層 具体実装と外部技術
-│  ├─ database/          # DB接続設定 各種DB技術
-│  │  ├─ mysql/          # MySQLリポジトリ実装 各フォルダ直下に必ず config.go
-│  │  │  ├─ config.go
-│  │  │  ├─ agent_repository.go
-│  │  │  └─ user_repository.go
-│  │  └─ redis/          # Redisキャッシュ実装 例 config.go 必須
-│  ├─ router/            # Echoルーティング簡易DIもここで
-│  │  └─ echo.go
-│  └─ storage/           # 外部ストレージクライアント 各フォルダに config.go 推奨
-│     └─ s3/             # AWS S3クライアント実装
-└─ main.go               # アプリケーション起動ファイル エントリーポイント
-
-
-```
-
-> 注意: エンティティ・値オブジェクトの実装配置について
-> Goでは、エンティティや値オブジェクトは `domain/entities/` や `domain/value_objects/` で純粋な構造体やインターフェースとして直接実装できます。
-> しかし、例えば `file_data.go` のように、フレームワーク固有の型から独立させるため抽象的な定義としてしか表現できないケースがあります。
-> このような場合、抽象定義はドメイン層に配置し、その具体実装を `infrastructure/domain_object_impls/entity_impls/` や `infrastructure/domain_object_impls/value_object_impls/` に配置します。
-> 多くのプロジェクトでは、エンティティ・値オブジェクトは直接ドメイン層で実装できるため、`infrastructure/domain_object_impls/` 配下のフォルダは空になることもあります。必要に応じて使用してください。
-
-### 3 各ディレクトリの責務 src
-
-* `src/domain/` ドメイン層
-* 責務: 純粋なビジネスルール
-* 内容:
-* `entities/`: エンティティ構造体とリポジトリインターフェースを同じファイルまたはディレクトリに配置
-* `value_objects/`: 値オブジェクト構造体とバリデーションロジック
-* `services/`: ドメインサービスのインターフェース
-
-
-
-
-* `src/usecase/` ユースケース層
-* 責務: アプリケーション固有のロジック
-* 内容: 具体的な操作フローを実装。domain層のインターフェースや構造体にのみ依存
-
-
-* `src/adapter/` アダプタ層
-* 責務: 外部と内部の翻訳
-* 内容:
-* `controller/`: Echoのコンテキストを受け取りUsecaseへ渡す
-* `presenter/`: Usecaseの結果をHTTPレスポンス用の構造体に変換
-
-
-
-
-* `src/infrastructure/` インフラ層
-* 責務: 外部技術とdomainインターフェースの具体実装
-* 内容:
-* `database/`: 各DB技術のリポジトリ実装
-* `router/`: Echoによるルーティング設定
-* `storage/`: 外部ストレージクライアント
-
-
-
-
-* `src/main.go`
-* 責務: アプリケーションの起動と依存関係の注入
-* 内容: DB接続の初期化、ルーターの設定、Echoサーバーの起動
-
-
-
----
-
-## 新規APIの追加手順 ガイド
-
-ここでは例として新しいエージェントを作成するAPIを追加する手順をステップバイステップで示します。
-
-### 実装前のチェック AI向け
-
-* 要件を一文で明確化します。
-* 既存のファイルや命名パターンを優先し、雛形を必要最小限で適用します。
-* 依頼にない層や機能は追加しません。
-* 依存制約を確認します。
-* 既存テストや動作に影響する広範囲の変更は避けます。
-
-### Step 1 ドメイン層 src domain
-
-責務はビジネスルールのインターフェース定義です。外部ライブラリへの依存を避け標準パッケージのみ使用します。
-
-1 エンティティと値オブジェクトの定義
-必要に応じて src/domain/entities/agent.go や src/domain/value_objects/ に、純粋なGoの構造体としてエンティティや値オブジェクトを定義または更新します。
-
-コード例 値オブジェクト domain/value_objects/id.go
-
-```go
-package value_objects
-
-import "errors"
-
-type ID int
-
-func NewID(value int) (ID, error) {
-    if value < 0 {
-        return 0, errors.New("ID must be non-negative")
-    }
-    return ID(value), nil
-}
-
-func (id ID) Value() int {
-    return int(id)
-}
-
-
-```
-
-コード例 エンティティとリポジトリ domain/entities/agent.go
-
-```go
-package entities
-
-import (
-    "context"
-    "src/domain/value_objects"
-)
-
-type Agent struct {
-    ID          value_objects.ID
-    UserID      value_objects.ID
-    Owner       string
-    Name        string
-    Description string
-}
-
-func NewAgent(id, userID int, owner, name, description string) (*Agent, error) {
-    agentID, err := value_objects.NewID(id)
-    if err != nil {
-        return nil, err
-    }
-    uID, err := value_objects.NewID(userID)
-    if err != nil {
-        return nil, err
-    }
-
-    return &Agent{
-        ID:          agentID,
-        UserID:      uID,
-        Owner:       owner,
-        Name:        name,
-        Description: description,
-    }, nil
-}
-
-type AgentRepository interface {
-    Create(ctx context.Context, agent *Agent) (*Agent, error)
-    FindByID(ctx context.Context, id value_objects.ID) (*Agent, error)
-    ListByUserID(ctx context.Context, userID value_objects.ID) ([]*Agent, error)
-    Update(ctx context.Context, agent *Agent) error
-    Delete(ctx context.Context, id value_objects.ID) error
-}
-
-
-```
-
-注意 Repositoryの実装範囲
-CRUD以外のメソッドは、明示的な要求がない限り追加しません。
-
-2 ドメインサービス インターフェースの定義
-エンティティや値オブジェクトに当てはまらないビジネスロジックは、 src/domain/services/ にドメインサービスとして定義します。
-
-コード例 ドメインサービス domain/services/auth_domain_service.go
-
-```go
-package services
-
-import (
-    "context"
-    "src/domain/entities"
-)
-
-type AuthDomainService interface {
-    VerifyToken(ctx context.Context, token string) (*entities.User, error)
-}
-
-
-```
-
-### Step 2 ユースケース層 src usecase
-
-責務 アプリケーション固有のロジックを実装します。
-
-依存関係の原則
-ユースケース層はドメイン層のオブジェクトのみを使用してコードを書きます。infrastructureやadapter、外部ライブラリには依存しません。
-
-1 ユースケースの作成
-src/usecase/create_agent.go を作成します。入力DTO、出力DTO、Presenterインターフェース、Usecaseインターフェース、そして実装となるInteractor構造体を定義します。
-
-コード例 create_agent.go
-
-```go
-package usecase
-
-import (
-    "context"
-    "src/domain/entities"
-    "src/domain/services"
-)
-
-type CreateAgentInput struct {
-    Token       string
-    Name        string
-    Description string
-}
-
-type CreateAgentOutput struct {
-    ID          int
-    UserID      int
-    Owner       string
-    Name        string
-    Description string
-}
-
-type CreateAgentPresenter interface {
-    Output(agent *entities.Agent) *CreateAgentOutput
-}
-
-type CreateAgentUseCase interface {
-    Execute(ctx context.Context, input CreateAgentInput) (*CreateAgentOutput, error)
-}
-
-type createAgentInteractor struct {
-    presenter   CreateAgentPresenter
-    agentRepo   entities.AgentRepository
-    authService services.AuthDomainService
-}
-
-func NewCreateAgentInteractor(
-    p CreateAgentPresenter,
-    r entities.AgentRepository,
-    a services.AuthDomainService,
-) CreateAgentUseCase {
-    return &createAgentInteractor{
-        presenter:   p,
-        agentRepo:   r,
-        authService: a,
-    }
-}
-
-func (i *createAgentInteractor) Execute(ctx context.Context, input CreateAgentInput) (*CreateAgentOutput, error) {
-    user, err := i.authService.VerifyToken(ctx, input.Token)
-    if err != nil {
-        return nil, err
-    }
-
-    agentToCreate, err := entities.NewAgent(0, user.ID.Value(), user.Username, input.Name, input.Description)
-    if err != nil {
-        return nil, err
-    }
-
-    createdAgent, err := i.agentRepo.Create(ctx, agentToCreate)
-    if err != nil {
-        return nil, err
-    }
-
-    return i.presenter.Output(createdAgent), nil
-}
-
-
-```
-
-### Step 3 インフラ層 実装 src infrastructure
-
-責務 domain層で定義されたインターフェースの具体的な実装を行います。
-
-1 データベース設定 config.go
-各データストアフォルダの直下に config.go を配置します。
-
-コード例 MySQL設定 infrastructure/database/mysql/config.go
-
-```go
-package mysql
-
-import (
-    "fmt"
-    "os"
-)
-
-type Config struct {
-    Host     string
-    Port     string
-    User     string
-    Password string
-    Database string
-}
-
-func NewConfigFromEnv() *Config {
-    return &Config{
-        Host:     os.Getenv("DB_HOST"),
-        Port:     os.Getenv("DB_PORT"),
-        User:     os.Getenv("DB_USER"),
-        Password: os.Getenv("DB_PASSWORD"),
-        Database: os.Getenv("DB_NAME"),
-    }
-}
-
-func (c *Config) DSN() string {
-    return fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true", c.User, c.Password, c.Host, c.Port, c.Database)
-}
-
-
-```
-
-2 リポジトリの実装
-エンティティパッケージ内で定義したリポジトリインターフェースを実装する構造体を定義します。
-
-コード例 リポジトリ実装 infrastructure/database/mysql/agent_repository.go
-
-```go
-package mysql
-
-import (
-    "context"
-    "database/sql"
-    "src/domain/entities"
-    "src/domain/value_objects"
-)
-
-type agentRepository struct {
-    db *sql.DB
-}
-
-func NewAgentRepository(db *sql.DB) entities.AgentRepository {
-    return &agentRepository{db: db}
-}
-
-func (r *agentRepository) Create(ctx context.Context, agent *entities.Agent) (*entities.Agent, error) {
-    query := `INSERT INTO agents (user_id, owner, name, description) VALUES (?, ?, ?, ?)`
-    result, err := r.db.ExecContext(ctx, query, agent.UserID.Value(), agent.Owner, agent.Name, agent.Description)
-    if err != nil {
-        return nil, err
-    }
-
-    id, err := result.LastInsertId()
-    if err != nil {
-        return nil, err
-    }
-
-    return entities.NewAgent(int(id), agent.UserID.Value(), agent.Owner, agent.Name, agent.Description)
-}
-
-func (r *agentRepository) FindByID(ctx context.Context, id value_objects.ID) (*entities.Agent, error) {
-    return nil, nil
-}
-
-func (r *agentRepository) ListByUserID(ctx context.Context, userID value_objects.ID) ([]*entities.Agent, error) {
-    return nil, nil
-}
-
-func (r *agentRepository) Update(ctx context.Context, agent *entities.Agent) error {
-    return nil
-}
-
-func (r *agentRepository) Delete(ctx context.Context, id value_objects.ID) error {
-    return nil
-}
-
-
-```
-
-### Step 4 アダプタ層 翻訳 src adapter
-
-責務 HTTPリクエストとユースケース層の翻訳を行います。Echoの機能はここで使います。
-
-1 コントローラーの作成
-src/adapter/controller/create_agent_controller.go を作成します。
-
-コード例 コントローラー adapter/controller/create_agent_controller.go
-
-```go
-package controller
-
-import (
-    "net/http"
-    "src/usecase"
-    "strings"
-
-    "github.com/labstack/echo/v4"
-)
-
-type CreateAgentRequest struct {
-    Name        string `json:"name"`
-    Description string `json:"description"`
-}
-
-type CreateAgentController struct {
-    usecase usecase.CreateAgentUseCase
-}
-
-func NewCreateAgentController(u usecase.CreateAgentUseCase) *CreateAgentController {
-    return &CreateAgentController{usecase: u}
-}
-
-func (ctrl *CreateAgentController) Execute(c echo.Context) error {
-    var req CreateAgentRequest
-    if err := c.Bind(&req); err != nil {
-        return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
-    }
-
-    authHeader := c.Request().Header.Get("Authorization")
-    token := strings.TrimPrefix(authHeader, "Bearer ")
-
-    input := usecase.CreateAgentInput{
-        Token:       token,
-        Name:        req.Name,
-        Description: req.Description,
-    }
-
-    output, err := ctrl.usecase.Execute(c.Request().Context(), input)
-    if err != nil {
-        return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-    }
-
-    return c.JSON(http.StatusCreated, output)
-}
-
-
-```
-
-2 プレゼンターの作成
-src/adapter/presenter/create_agent_presenter.go を作成します。
-
-コード例 プレゼンター adapter/presenter/create_agent_presenter.go
-
-```go
-package presenter
-
-import (
-    "src/domain/entities"
-    "src/usecase"
-)
-
-type createAgentPresenter struct{}
-
-func NewCreateAgentPresenter() usecase.CreateAgentPresenter {
-    return &createAgentPresenter{}
-}
-
-func (p *createAgentPresenter) Output(agent *entities.Agent) *usecase.CreateAgentOutput {
-    return &usecase.CreateAgentOutput{
-        ID:          agent.ID.Value(),
-        UserID:      agent.UserID.Value(),
-        Owner:       agent.Owner,
-        Name:        agent.Name,
-        Description: agent.Description,
-    }
-}
-
-
-```
-
-### Step 5 インフラ層 接続 src infrastructure
-
-責務 すべての部品を接続し、Echoエンドポイントとして公開します。手動DIを行います。
-
-コード例 ルーター infrastructure/router/echo.go
-
-```go
-package router
-
-import (
-    "database/sql"
-    "src/adapter/controller"
-    "src/adapter/presenter"
-    "src/infrastructure/database/mysql"
-    "src/infrastructure/services"
-    "src/usecase"
-
-    "github.com/labstack/echo/v4"
-)
-
-func InitRoutes(e *echo.Echo, db *sql.DB) {
-    agentRepo := mysql.NewAgentRepository(db)
-    
-    authService := services.NewAuthServiceImpl() 
-
-    createAgentPresenter := presenter.NewCreateAgentPresenter()
-    createAgentUsecase := usecase.NewCreateAgentInteractor(createAgentPresenter, agentRepo, authService)
-    createAgentController := controller.NewCreateAgentController(createAgentUsecase)
-
-    v1 := e.Group("/v1")
-    v1.POST("/agents", createAgentController.Execute)
-}
-
-
-```
-
-### Step 6 起動ファイル src main go
-
-責務 アプリケーション起動時にDB接続とEchoインスタンスを初期化し、全体を統合します。
-
-コード例 起動ファイル src/main.go
-
-```go
-package main
-
-import (
-    "database/sql"
-    "log"
-    "src/infrastructure/database/mysql"
-    "src/infrastructure/router"
-
-    _ "github.com/go-sql-driver/mysql"
-    "github.com/labstack/echo/v4"
-    "github.com/labstack/echo/v4/middleware"
-)
-
-func main() {
-    config := mysql.NewConfigFromEnv()
-    db, err := sql.Open("mysql", config.DSN())
-    if err != nil {
-        log.Fatalf("Failed to connect to database: %v", err)
-    }
-    defer db.Close()
-
-    if err := db.Ping(); err != nil {
-        log.Fatalf("Failed to ping database: %v", err)
-    }
-
-    e := echo.New()
-
-    e.Use(middleware.Logger())
-    e.Use(middleware.Recover())
-    e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-        AllowOrigins: []string{"*"},
-        AllowMethods: []string{echo.GET, echo.POST, echo.PUT, echo.DELETE},
-    }))
-
-    router.InitRoutes(e, db)
-
-    e.GET("/health", func(c echo.Context) error {
-        return c.JSON(200, map[string]string{"status": "ok"})
-    })
-
-    e.Logger.Fatal(e.Start(":8000"))
-}
-
-
+Reso_backend/
+├─ atlas.hcl
+├─ docker-compose.yml
+├─ README.md
+├─ gid.md
+└─ app/
+   ├─ Dockerfile
+   ├─ go.mod
+   ├─ migrations/
+   │  └─ 001_init.sql
+   └─ src/
+      ├─ main.go
+      ├─ adapter/
+      │  ├─ controller/
+      │  └─ presenter/
+      ├─ domain/
+      │  ├─ entities/
+      │  ├─ services/
+      │  └─ value_objects/
+      ├─ infrastructure/
+      │  ├─ database/postgres/
+      │  ├─ domain_impl/services/
+      │  ├─ router/
+      │  └─ storage/
+      └─ usecase/
 ```
 
 ---
 
-## テスト設計と実装ガイドライン
+## 2. 最上位ルール（必ず守る）
 
-Go言語における標準的なテスト手法に従い、クリーンアーキテクチャの階層構造に基づいてテストの責務を分離します。
+### 2.1 変更スコープ
 
-### 1 テストフォルダ構成
+- 依頼された機能達成に必要な最小ファイルのみ変更すること（MUST）。
+- 既存の公開 API（エンドポイント、JSON キー名、主要 DTO 名）を勝手に変更しないこと（MUST）。
+- 依頼されていない新規レイヤ・新規共通化・新規抽象化を追加しないこと（MUST NOT）。
 
-Goの規約に従い、単体テストはテスト対象のファイルと同じディレクトリに配置し、ファイル名の末尾を _test.go とします。統合テストは tests ディレクトリに分離します。
+### 2.2 依存方向
 
-```text
-src/
-├─ domain/
-│  └─ entities/
-│     ├─ agent.go
-│     └─ agent_test.go    # ドメインの単体テスト
-├─ usecase/
-│  ├─ create_agent.go
-│  └─ create_agent_test.go # ユースケースの単体テスト
-tests/
-├─ integration/           # DB接続を伴う統合テストやE2Eテスト
+- `usecase` は `domain` のみ参照すること（MUST）。
+- `usecase` から `adapter` / `infrastructure` を import しないこと（MUST NOT）。
+- `domain` はフレームワーク依存しないこと（MUST）。
 
+### 2.3 命名・配置
 
+- 既存命名規則 `snake_case` ファイル名 + `NewXxx...` コンストラクタを踏襲すること（MUST）。
+- コントローラーは `app/src/adapter/controller/*_controller.go` に配置すること（MUST）。
+- プレゼンターは `app/src/adapter/presenter/*_presenter.go` に配置すること（MUST）。
+- ユースケースは `app/src/usecase/*.go` に配置し、同名 `_test.go` を作ること（MUST）。
+
+### 2.4 既存スタイル維持
+
+- VO から値を取り出すときは `String()`, `Value()`, `Int()`, `Float64()` を使用すること（MUST）。
+- エラーは `fmt.Errorf("context: %w", err)` でラップする既存流儀を優先すること（MUST）。
+- `context.Context` は controller -> usecase -> repository へ受け渡すこと（MUST）。
+
+---
+
+## 3. レイヤ責務（固定）
+
+### 3.1 Domain 層
+
+配置:
+- `app/src/domain/entities/`
+- `app/src/domain/value_objects/`
+- `app/src/domain/services/`
+
+責務:
+- Entity と VO の不変条件管理
+- Repository / Domain Service interface 定義
+
+禁止:
+- Echo, SQL ドライバ, JWT ライブラリなどの技術依存を入れること
+
+### 3.2 Usecase 層
+
+配置:
+- `app/src/usecase/`
+
+責務:
+- アプリケーションの操作フローを定義
+- Input / Output DTO 定義
+- Presenter interface 定義
+- Interactor 実装
+
+必須構造:
+- `XxxInput`
+- `XxxOutput`（必要なら中間 Payload 構造体）
+- `XxxPresenter` interface
+- `XxxUseCase` interface
+- `xxxInteractor` struct
+- `NewXxxInteractor(...)`
+- `Execute(ctx context.Context, input XxxInput) (..., error)`
+
+### 3.3 Adapter 層
+
+配置:
+- `app/src/adapter/controller/`
+- `app/src/adapter/presenter/`
+
+責務:
+- Controller: HTTP -> Usecase Input 変換
+- Presenter: Domain/Usecase data -> JSON DTO 整形
+
+固定動作:
+- Controller は `c.Bind` または `c.QueryParam` で入力を取得
+- 認証が必要な API は `Authorization: Bearer <token>` を明示処理
+- HTTP ステータスは既存 API 契約を維持
+
+### 3.4 Infrastructure 層
+
+配置:
+- `app/src/infrastructure/database/postgres/`
+- `app/src/infrastructure/domain_impl/services/`
+- `app/src/infrastructure/router/`
+
+責務:
+- Repository 実装
+- Domain Service 実装（JWT 発行/検証、推薦アルゴリズムの具体化）
+- ルーティングと手動 DI
+
+固定動作:
+- ルーティング初期化は `router.InitRoutes(e, db)`
+- 依存注入順序は「Repository -> DomainImplService -> Presenter -> Usecase -> Controller」
+
+---
+
+## 4. API 契約（現行固定）
+
+この章は現行実装と一致させること。AI は勝手に変更してはいけない。
+
+### 4.1 POST /v1/auth/login
+
+Request JSON:
+
+```json
+{
+  "username": "string",
+  "password": "string"
+}
 ```
 
-### 2 テスト環境とルール
+Response 200:
 
-標準パッケージの testing を基本とし、必要に応じてモック生成ツールである gomock や testify などのアサーションライブラリを導入します。テストデータ生成やDBリセット処理は各統合テストのSetup関数内で定義します。
-
-### 3 各層のテスト実装テンプレート
-
-A ドメイン層の単体テスト
-DB接続は行わず構造体や関数のロジックを検証します。
-
-```go
-package entities_test
-
-import (
-    "src/domain/entities"
-    "testing"
-)
-
-func TestNewAgent_Valid(t *testing.T) {
-    agent, err := entities.NewAgent(1, 100, "test_user", "MyAgent", "desc")
-    if err != nil {
-        t.Fatalf("unexpected error: %v", err)
-    }
-    if agent.Name != "MyAgent" {
-        t.Errorf("expected MyAgent, got %s", agent.Name)
-    }
+```json
+{
+  "token": "jwt"
 }
-
-
 ```
 
-B ユースケース層の単体テスト
-すべての依存リポジトリやサービスをモック化してビジネスフローを検証します。
+Error:
+- 400: `{"error":"Invalid request body"}`
+- 401: `{"error":"..."}`
 
-```go
-package usecase_test
+### 4.2 POST /v1/users/signup
 
-import (
-    "context"
-    "src/domain/entities"
-    "src/usecase"
-    "testing"
-)
+Request JSON:
 
-type mockAgentRepository struct {
-    entities.AgentRepository
+```json
+{
+  "username": "string",
+  "email": "string",
+  "password": "string"
 }
-
-func (m *mockAgentRepository) Create(ctx context.Context, agent *entities.Agent) (*entities.Agent, error) {
-    return entities.NewAgent(1, agent.UserID.Value(), agent.Owner, agent.Name, agent.Description)
-}
-
-func TestCreateAgentInteractor_Execute(t *testing.T) {
-    repo := &mockAgentRepository{}
-    
-    // authServiceやpresenterのモックも定義して注入します
-    // 依存関係を設定した上でExecuteを呼び出し戻り値を検証します
-}
-
-
 ```
 
-C インフラ層の統合テスト
-テスト用のDBを立ち上げAtlas等でスキーマを適用した状態に対してテストを実行します。
+Response 201:
 
-```go
-package mysql_test
-
-import (
-    "context"
-    "database/sql"
-    "src/domain/entities"
-    "src/infrastructure/database/mysql"
-    "testing"
-)
-
-func TestAgentRepository_Create(t *testing.T) {
-    // dbはテストセットアップで初期化された接続を使用します
-    repo := mysql.NewAgentRepository(testDB)
-    
-    agent, _ := entities.NewAgent(0, 1, "owner", "RepoTest", "desc")
-    created, err := repo.Create(context.Background(), agent)
-    
-    if err != nil {
-        t.Fatalf("failed to create agent: %v", err)
-    }
-    if created.ID.Value() == 0 {
-        t.Error("expected non-zero ID")
-    }
+```json
+{
+  "id": 1,
+  "token": "jwt"
 }
-
-
 ```
 
-### 4 実行方法
+Error:
+- 400: `{"error":"Invalid request body"}`
+- 500: `{"error":"..."}`
 
-Goの標準テストコマンドを使用します。
+### 4.3 PUT /v1/mesh/spots
+
+Header:
+- `Authorization: Bearer <token>`
+
+Request JSON:
+
+```json
+{
+  "spot_name": "string",
+  "latitude": 35.0,
+  "longitude": 139.0,
+  "image_url": "string",
+  "caption": "string",
+  "overwrite": false
+}
+```
+
+Response 200（概形）:
+
+```json
+{
+  "message": "post created",
+  "has_existing_info": false,
+  "spot": {
+    "id": 1,
+    "name": "string",
+    "mesh_id": "string",
+    "location": {
+      "latitude": 35.0,
+      "longitude": 139.0
+    }
+  },
+  "post": {
+    "id": 1,
+    "user_name": "string",
+    "image_url": "string",
+    "caption": "string",
+    "posted_at": "RFC3339"
+  }
+}
+```
+
+Error:
+- 401: `{"error":"Missing or invalid authorization header"}`
+- 400: `{"error":"Invalid request body"}`
+- 409: `{"error":"..."}`
+
+### 4.4 GET /v1/recommendation/distill
+
+Header:
+- `Authorization: Bearer <token>`
+
+Query:
+- `latitude` (required)
+- `longitude` (required)
+
+Response 200（概形）:
+
+```json
+{
+  "recommendation": {
+    "spot": {
+      "id": 1,
+      "name": "string",
+      "mesh_id": "string",
+      "location": {
+        "latitude": 35.0,
+        "longitude": 139.0
+      }
+    },
+    "distillation_analysis": {
+      "resonance_score": 0,
+      "density_score": 0,
+      "total_score": 0.0,
+      "reason": "string"
+    },
+    "posts": [
+      {
+        "id": 1,
+        "user_name": "string",
+        "caption": "string",
+        "image_url": "string",
+        "posted_at": "RFC3339"
+      }
+    ]
+  }
+}
+```
+
+Error:
+- 401: 認証不備/認証失敗
+- 400: 緯度経度パラメータ不備/形式不正
+- 404: `{"message":"No recommendation found in your resonance circle"}`
+
+### 4.5 GET /v1/users/me/spots
+
+Header:
+- `Authorization: Bearer <token>`
+
+Response 200（概形）:
+
+```json
+{
+  "user_spots": [
+    {
+      "spot": {
+        "id": 1,
+        "name": "string",
+        "mesh_id": "string",
+        "location": {
+          "latitude": 35.0,
+          "longitude": 139.0
+        }
+      },
+      "post": {
+        "id": 10,
+        "user_name": "string",
+        "image_url": "string or null",
+        "caption": "string",
+        "posted_at": "RFC3339"
+      }
+    }
+  ]
+}
+```
+
+Error:
+- 401: `{"error":"Missing or invalid authorization header"}` または認証エラー
+
+---
+
+## 5. RegisterSpotPost の業務ルール（固定）
+
+このユースケースは分岐が複雑なため、以下を固定仕様とする。
+
+1. `mesh_id` を座標から計算する。
+2. ユーザー自身の同一メッシュ投稿を検索する。
+3. `overwrite=false` かつ同一メッシュ投稿あり:
+- 新規投稿を作らず、既存 Spot 情報とユーザー最新 Post を返す。
+4. `overwrite=true`:
+- 入力座標の Spot を再解決（なければ作成）。
+- その Spot 上の「自分の既存投稿」を削除。
+- 新規投稿を 1 件だけ作成。
+5. ユーザー自身の同一メッシュ投稿なし:
+- 同一座標 Spot があれば合流。
+- なければ Spot 新規作成後に投稿。
+
+注意:
+- `has_existing_info` は既存情報の有無を正しく反映する。
+- `posted_at` は RFC3339 文字列として返す。
+
+---
+
+## 6. DB 仕様（固定）
+
+`app/migrations/001_init.sql` を正とする。
+
+主要テーブル:
+- `users`
+- `spots`
+- `posts`
+
+固定ポイント:
+- PostGIS 拡張を利用する。
+- `spots.location` は `GEOGRAPHY(POINT,4326)`。
+- 同一座標一意制約（`ST_X`, `ST_Y`）を維持する。
+- `posts.image_url` は NULL 許容。
+
+---
+
+## 7. 新規 API 追加手順（必須ワークフロー）
+
+AI は以下の順序で実装すること。
+
+1. Domain 変更の要否確認
+- 新しい Entity/VO/Repository method が必要かだけ判断
+- 不要なら Domain は触らない
+
+2. Usecase 作成
+- `app/src/usecase/<feature>.go`
+- Input/Output/Presenter interface/UseCase interface/Interactor/Execute を作成
+
+3. Presenter 作成
+- `app/src/adapter/presenter/<feature>_presenter.go`
+- Usecase Output へ正規化
+
+4. Controller 作成
+- `app/src/adapter/controller/<feature>_controller.go`
+- HTTP 入力を Usecase Input へ変換
+
+5. Infrastructure 実装
+- 必要時のみ `postgres/*_repository.go` と `domain_impl/services/*` を実装/拡張
+
+6. Router 接続
+- `app/src/infrastructure/router/echo.go` に DI と route を追加
+
+7. テスト作成
+- `app/src/usecase/<feature>_test.go` を作成/更新
+- 正常系/異常系を最低 1 件ずつ追加
+
+---
+
+## 8. テスト規約（固定）
+
+### 8.1 単体テスト対象
+
+- 最優先: Usecase
+- 必要に応じて Presenter / Domain VO
+
+### 8.2 テスト方針
+
+- `testify/assert` + `testify/mock` を使用。
+- 依存はモック化し、Usecase の分岐を検証する。
+- 異常系は「どこで失敗したか」が分かる assertion を記述する。
+
+### 8.3 既知の注意点（再発防止）
+
+- `entities.NewUser` などのコンストラクタ error を無視しない。
+- フィクスチャの hashed password は妥当値を使う（例: `"hashed_password"`）。
+- `RegisterSpotPost` の overwrite 分岐は競合しやすいので、
+  `overwrite=true/false` を別ケースで明示テストする。
+
+### 8.4 テスト実行コマンド
 
 ```bash
-# 単体テストのみ実行
-go test ./src/...           
-
-# 統合テストのみ実行
-go test ./tests/...         
-
-# 詳細出力ありですべて実行
-go test -v ./...            
-
-# 特定のテストを指定して実行
-go test -run TestNewAgent   
-
-
+cd app
+go test -v ./src/usecase/...
 ```
+
+必要に応じて:
+
+```bash
+go test -v ./src/usecase/ -run TestRegisterSpotPost
+```
+
+---
+
+## 9. 実装時の禁止事項
+
+- 要求外のパッケージ追加（MUST NOT）
+- 要求外の DB スキーマ変更（MUST NOT）
+- 既存 API の JSON キー名変更（MUST NOT）
+- 認証方式（Bearer JWT）の変更（MUST NOT）
+- 一括リファクタなど広範囲変更（MUST NOT）
+
+---
+
+## 10. AI 作業完了条件（Definition of Done）
+
+以下をすべて満たした場合のみ完了とする。
+
+1. 実装した機能が本仕様のレイヤ責務に違反していない。
+2. 追加/変更 API が既存契約を壊していない。
+3. 追加/変更した Usecase に対応する `_test.go` が存在する。
+4. `go test -v ./src/usecase/...` が通る（少なくとも変更箇所関連）。
+5. 変更理由を「何を」「なぜ」「どこで」説明できる。
+
+---
+
+## 11. 他AIへ渡す実行プロンプト（コピペ用）
+
+以下を他 AI への冒頭指示に使うこと。
+
+```text
+あなたは Reso_backend のバックエンド実装者です。
+最優先で gid.md を順守してください。
+
+ルール:
+- gid.md の MUST/MUST NOT に従うこと
+- 依頼スコープ外の変更をしないこと
+- Clean Architecture の依存方向を守ること
+- 既存 API 契約（path, method, JSON keys, status）を壊さないこと
+- 実装後に usecase テストを追加/更新すること
+
+出力形式:
+1. 変更したファイル一覧
+2. 実装内容（要点）
+3. テスト内容
+4. 残課題（なければ「なし」）
+```
+
+この仕様書と既存コードが矛盾する場合は、既存コードを正としてこの仕様書を更新してから実装すること。
