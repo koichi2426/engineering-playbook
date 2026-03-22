@@ -1,403 +1,395 @@
-# Reso Backend 実装固定仕様書（AI開発テンプレート）
+# 開発ガイドライン（テンプレート）
 
-この文書は、Reso_backend のバックエンド開発を AI に実行させるための固定仕様です。
-目的は「実装の揺れをなくすこと」です。
+この文書は任意の API サービス実装で再利用できる汎用的な「開発ガイドライン（テンプレート）」です。
+このリポジトリ内にある `reso`（Reso_backend）は本ドキュメントの例として使われている実装の一例にすぎません。
+ガイドラインはプロジェクトごとに調整可能ですが、ここに示す慣習や責務分離は一貫性を保つための参考規約として機械的に守ることを推奨します。
 
-- この仕様書のキーワード `MUST` は必須です。
-- この仕様書のキーワード `MUST NOT` は禁止です。
-- 明記されていない最適化・抽象化・拡張は `MUST NOT` です。
-
----
-
-## 1. プロジェクト前提（固定）
-
-- 言語: Go
-- モジュール: `app`
-- HTTP フレームワーク: Echo v4
-- DB: PostgreSQL + PostGIS
-- マイグレーション: Atlas
-- アーキテクチャ: Clean Architecture（Domain / Usecase / Adapter / Infrastructure）
-
-ルート構成（固定）:
-
-```text
-Reso_backend/
-├─ atlas.hcl
-├─ docker-compose.yml
-├─ README.md
-├─ gid.md
-└─ app/
-   ├─ Dockerfile
-   ├─ go.mod
-   ├─ migrations/
-   │  └─ 001_init.sql
-   └─ src/
-      ├─ main.go
-      ├─ adapter/
-      │  ├─ controller/
-      │  └─ presenter/
-      ├─ domain/
-      │  ├─ entities/
-      │  ├─ services/
-      │  └─ value_objects/
-      ├─ infrastructure/
-      │  ├─ database/postgres/
-      │  ├─ domain_impl/services/
-      │  ├─ router/
-      │  └─ storage/
-      └─ usecase/
-```
+- 本ドキュメント中の `MUST` は必須、`MUST NOT` は禁止を意味します。
+- 明記のない最適化や抽象化は、チーム合意がない限り追加しないことを推奨します（原則として保守性優先）。
 
 ---
 
-## 2. 最上位ルール（必ず守る）
+## 1. 目的と適用範囲
+
+- 目的: 実装の一貫性を高め、レビュー・自動化・AI支援による変更の安全性を担保すること。
+- 適用範囲: 言語やフレームワークに依存しないルールを優先しつつ、実例としてこのリポジトリの `reso` 実装（Go + Echo + PostgreSQL など）を参照しています。
+- 注意: 実プロジェクトでは要件に応じて技術スタックやディレクトリ構成を柔軟に調整してください。
+
+---
+
+## 2. 最上位ルール（必須ガイドライン）
 
 ### 2.1 変更スコープ
 
-- 依頼された機能達成に必要な最小ファイルのみ変更すること（MUST）。
-- 既存の公開 API（エンドポイント、JSON キー名、主要 DTO 名）を勝手に変更しないこと（MUST）。
-- 依頼されていない新規レイヤ・新規共通化・新規抽象化を追加しないこと（MUST NOT）。
+- 依頼された機能達成に必要最小限の変更に留める（MUST）。
+- 既存の公開 API（エンドポイント、JSON スキーマ、主要 DTO 名）を勝手に変更しない（MUST）。
+- 新規レイヤ追加や大規模な共通化は、設計合意を得てから行う（MUST NOT：合意なし）。
 
-### 2.2 依存方向
+### 2.2 依存方向（アーキテクチャ原則）
 
-- `usecase` は `domain` のみ参照すること（MUST）。
-- `usecase` から `adapter` / `infrastructure` を import しないこと（MUST NOT）。
-- `domain` はフレームワーク依存しないこと（MUST）。
+- ユースケース層はドメイン層に依存し、インフラやフレームワークには依存させない（例: Usecase -> Domain）（MUST）。
+- ドメイン層は技術的依存（フレームワーク、DB ドライバ等）を持たない（MUST）。
 
-### 2.3 命名・配置
+（具体的なフォルダ名・パスはプロジェクトの慣習に合わせて調整可）
 
-- 既存命名規則 `snake_case` ファイル名 + `NewXxx...` コンストラクタを踏襲すること（MUST）。
-- コントローラーは `app/src/adapter/controller/*_controller.go` に配置すること（MUST）。
-- プレゼンターは `app/src/adapter/presenter/*_presenter.go` に配置すること（MUST）。
-- ユースケースは `app/src/usecase/*.go` に配置し、同名 `_test.go` を作ること（MUST）。
+### 2.3 命名・配置（慣習）
 
-### 2.4 既存スタイル維持
+- ファイル命名やコンストラクタの慣習をチームで定め、それを踏襲すること（MUST）。
+- 例: Go プロジェクトでは `snake_case` ファイル名 + `NewXxx` コンストラクタを用いることが多い。
 
-- VO から値を取り出すときは `String()`, `Value()`, `Int()`, `Float64()` を使用すること（MUST）。
-- エラーは `fmt.Errorf("context: %w", err)` でラップする既存流儀を優先すること（MUST）。
-- `context.Context` は controller -> usecase -> repository へ受け渡すこと（MUST）。
+#### 2.3.1 ファイル命名と配置（具体例）
+
+以下はこのリポジトリ（`reso`）で使われている具体的な慣習です。他プロジェクトでも参考になるため例として残します。
+
+- ルート例（参考）:
+
+```text
+Reso_backend/
+└─ app/
+   └─ src/
+      ├─ main.go
+      ├─ adapter/
+      │  ├─ controller/*_controller.go
+      │  └─ presenter/*_presenter.go
+      ├─ domain/
+      │  ├─ entities/*.go
+      │  ├─ services/*.go
+      │  └─ value_objects/*.go
+      ├─ infrastructure/
+      │  ├─ database/postgres/*_repository.go
+      │  ├─ domain_impl/services/*_impl.go
+      │  └─ router/echo.go
+      └─ usecase/*_usecase.go
+```
+
+- 命名例:
+  - コントローラ: `register_spot_post_controller.go`
+  - プレゼンター: `register_spot_post_presenter.go`
+  - ユースケース: `register_spot_post.go` と `register_spot_post_test.go`
+  - リポジトリ実装: `user_repository.go`, `spot_repository.go`
+
+これらはあくまで「例」です。プロジェクト方針があればそちらを優先してください。
+
+### 2.4 エラーハンドリング / コンテキスト
+
+- エラーは適切にラップして伝搬する（例: `fmt.Errorf("...: %w", err)`）。
+- `context.Context` は外部入力のライフサイクルに合わせて上位から下位へ受け渡す。
 
 ---
 
-## 3. レイヤ責務（固定）
+## 3. レイヤ責務（推奨パターン）
+
+以下は Clean Architecture に沿った責務分離の例です。プロジェクトに合わせて緩やかに採用してください。
 
 ### 3.1 Domain 層
 
-配置:
-- `app/src/domain/entities/`
-- `app/src/domain/value_objects/`
-- `app/src/domain/services/`
-
-責務:
-- Entity と VO の不変条件管理
-- Repository / Domain Service interface 定義
-
-禁止:
-- Echo, SQL ドライバ, JWT ライブラリなどの技術依存を入れること
+- 責務: Entity と VO の不変条件、ドメインルール、Repository / Domain Service のインターフェース定義。
+- 禁止: フレームワークや DB ドライバへの依存注入をドメイン層に持ち込まない。
 
 ### 3.2 Usecase 層
 
-配置:
-- `app/src/usecase/`
+- 責務: アプリケーションの操作フロー、Input/Output DTO、Presenter インターフェース、Interactor 実装。
+- 必須構成例: `XxxInput`, `XxxOutput`, `XxxPresenter` interface, `XxxUseCase` interface, `xxxInteractor` struct, `Execute(ctx, input)` メソッド。
 
-責務:
-- アプリケーションの操作フローを定義
-- Input / Output DTO 定義
-- Presenter interface 定義
-- Interactor 実装
+### 3.3 Adapter 層（インターフェース適合）
 
-必須構造:
-- `XxxInput`
-- `XxxOutput`（必要なら中間 Payload 構造体）
-- `XxxPresenter` interface
-- `XxxUseCase` interface
-- `xxxInteractor` struct
-- `NewXxxInteractor(...)`
-- `Execute(ctx context.Context, input XxxInput) (..., error)`
-
-### 3.3 Adapter 層
-
-配置:
-- `app/src/adapter/controller/`
-- `app/src/adapter/presenter/`
-
-責務:
-- Controller: HTTP -> Usecase Input 変換
-- Presenter: Domain/Usecase data -> JSON DTO 整形
-
-固定動作:
-- Controller は `c.Bind` または `c.QueryParam` で入力を取得
-- 認証が必要な API は `Authorization: Bearer <token>` を明示処理
-- HTTP ステータスは既存 API 契約を維持
+- 責務: HTTP/CLI/Batch など外部との入出力を Usecase の Input/Output に変換する。
+- 例: Controller は HTTP リクエストを Bind/Validate し Usecase Input を生成、Presenter は Usecase Output を HTTP レスポンスへ整形。
 
 ### 3.4 Infrastructure 層
 
-配置:
-- `app/src/infrastructure/database/postgres/`
-- `app/src/infrastructure/domain_impl/services/`
-- `app/src/infrastructure/router/`
-
-責務:
-- Repository 実装
-- Domain Service 実装（JWT 発行/検証、推薦アルゴリズムの具体化）
-- ルーティングと手動 DI
-
-固定動作:
-- ルーティング初期化は `router.InitRoutes(e, db)`
-- 依存注入順序は「Repository -> DomainImplService -> Presenter -> Usecase -> Controller」
+- 責務: Repository 実装、外部サービス統合、ルーティング初期化、依存注入の組み立て。
 
 ---
 
-## 4. API 契約（現行固定）
+## コード例（Go）
 
-この章は現行実装と一致させること。AI は勝手に変更してはいけない。
+以下は他のAIやエンジニアが実装例を理解しやすくするための簡易コード例です。細部はプロジェクトに合わせて調整してください。
 
-### 4.1 POST /v1/auth/login
+Usecase（Interactor）の簡易例:
 
-Request JSON:
+```go
+type RegisterSpotPostInput struct {
+  SpotName  string
+  Latitude  float64
+  Longitude float64
+  ImageURL  string
+  Caption   string
+  Overwrite bool
+}
 
-```json
-{
-  "username": "string",
-  "password": "string"
+type RegisterSpotPostOutput struct {
+  Message string
+}
+
+type RegisterSpotPostPresenter interface {
+  Present(ctx context.Context, out RegisterSpotPostOutput) error
+}
+
+type RegisterSpotPostUseCase interface {
+  Execute(ctx context.Context, in RegisterSpotPostInput) (RegisterSpotPostOutput, error)
+}
+
+type registerSpotPostInteractor struct {
+  repo      SpotRepository
+  presenter RegisterSpotPostPresenter
+}
+
+func NewRegisterSpotPostInteractor(r SpotRepository, p RegisterSpotPostPresenter) RegisterSpotPostUseCase {
+  return &registerSpotPostInteractor{repo: r, presenter: p}
+}
+
+func (it *registerSpotPostInteractor) Execute(ctx context.Context, in RegisterSpotPostInput) (RegisterSpotPostOutput, error) {
+  // ビジネスロジック（略）
+  return RegisterSpotPostOutput{Message: "post created"}, nil
 }
 ```
 
-Response 200:
+Presenter（HTTP 変換）の簡易例:
 
-```json
-{
-  "token": "jwt"
+```go
+type HTTPRegisterSpotPostPresenter struct{
+  c echo.Context
+}
+
+func (p *HTTPRegisterSpotPostPresenter) Present(ctx context.Context, out RegisterSpotPostOutput) error {
+  return p.c.JSON(http.StatusOK, out)
 }
 ```
 
-Error:
-- 400: `{"error":"Invalid request body"}`
-- 401: `{"error":"..."}`
+Controller（Echo ハンドラ）簡易例:
 
-### 4.2 POST /v1/users/signup
-
-Request JSON:
-
-```json
-{
-  "username": "string",
-  "email": "string",
-  "password": "string"
-}
-```
-
-Response 201:
-
-```json
-{
-  "id": 1,
-  "token": "jwt"
-}
-```
-
-Error:
-- 400: `{"error":"Invalid request body"}`
-- 500: `{"error":"..."}`
-
-### 4.3 PUT /v1/mesh/spots
-
-Header:
-- `Authorization: Bearer <token>`
-
-Request JSON:
-
-```json
-{
-  "spot_name": "string",
-  "latitude": 35.0,
-  "longitude": 139.0,
-  "image_url": "string",
-  "caption": "string",
-  "overwrite": false
-}
-```
-
-Response 200（概形）:
-
-```json
-{
-  "message": "post created",
-  "has_existing_info": false,
-  "spot": {
-    "id": 1,
-    "name": "string",
-    "mesh_id": "string",
-    "location": {
-      "latitude": 35.0,
-      "longitude": 139.0
+```go
+func RegisterSpotPostController(u RegisterSpotPostUseCase) echo.HandlerFunc {
+  return func(c echo.Context) error {
+    var req RegisterSpotPostInput
+    if err := c.Bind(&req); err != nil {
+      return c.JSON(http.StatusBadRequest, map[string]string{"error":"Invalid request body"})
     }
-  },
-  "post": {
-    "id": 1,
-    "user_name": "string",
-    "image_url": "string",
-    "caption": "string",
-    "posted_at": "RFC3339"
+    out, err := u.Execute(c.Request().Context(), req)
+    if err != nil {
+      return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+    }
+    return c.JSON(http.StatusOK, out)
   }
 }
 ```
 
-Error:
-- 401: `{"error":"Missing or invalid authorization header"}`
-- 400: `{"error":"Invalid request body"}`
-- 409: `{"error":"..."}`
+Repository インターフェースの例:
 
-### 4.4 GET /v1/recommendation/distill
+```go
+type SpotRepository interface {
+  FindByMesh(ctx context.Context, meshID string) (*Spot, error)
+  Create(ctx context.Context, s *Spot) error
+}
+```
 
-Header:
-- `Authorization: Bearer <token>`
+---
 
-Query:
-- `latitude` (required)
-- `longitude` (required)
+---
 
-Response 200（概形）:
+## 4. API 契約と変更方針（重要）
 
-```json
-{
-  "recommendation": {
-    "spot": {
-      "id": 1,
-      "name": "string",
-      "mesh_id": "string",
-      "location": {
-        "latitude": 35.0,
-        "longitude": 139.0
-      }
-    },
-    "distillation_analysis": {
-      "resonance_score": 0,
-      "density_score": 0,
-      "total_score": 0.0,
-      "reason": "string"
-    },
-    "posts": [
-      {
-        "id": 1,
-        "user_name": "string",
-        "caption": "string",
-        "image_url": "string",
-        "posted_at": "RFC3339"
-      }
-    ]
+- 既存 API の契約は破壊的変更を避ける（MUST）。
+- 新しい API を追加する場合はスキーマ・ステータスコード・エラーフォーマットを仕様化してから実装する。
+- `reso` の実装は具体例としていくつかのエンドポイント契約を示していますが、それらはプロジェクト固有の仕様として扱ってください。
+
+（プロジェクトに合わせた例: login, signup, post 登録, 推薦 API 等 — 詳細は該当実装を参照）
+
+---
+
+## 5. ユースケース設計上の注意（例示）
+
+- 特に分岐が多いユースケースは、まずドメインルールと期待出力を明確化する。
+- 例として `RegisterSpotPost` のようなケースでは、既存情報の有無や overwrite フラグに基づく振る舞いをテストで明確化すること。
+
+（実際の振る舞いは実装例 `reso` を参照の上、プロジェクト要件に合わせて調整）
+
+---
+
+## 6. DB・マイグレーション（運用上の注意）
+
+- DB スキーマはマイグレーションファイルを単一の信頼できるソースとして管理する。
+- 地理空間データを扱う場合は PostGIS 等の拡張を明示し、戻せるマイグレーションを用意する。
+
+---
+
+## 7. 新規 API 追加ワークフロー（推奨手順）
+
+1. 影響範囲の確認（Domain 変更が必要かを判断）。
+2. Usecase の作成（Input/Output/Presenter/Interactor）。
+3. Presenter の作成（API スキーマへの整形）。
+4. Controller の作成（HTTP 入力のバリデーションと Usecase 呼び出し）。
+5. 必要であれば Infrastructure に Repository/Service 実装を追加。
+6. ルーティングと DI の接続。
+7. 単体テスト・結合テストの追加と CI での検証。
+
+### 7.1 詳細手順（ファイル作成・配置の具体例）
+
+以下は「新しい API（例: RegisterSpotPost）」を追加する際に作成/編集するファイルの具体例と最小テンプレートです。プロジェクトの命名規則に合わせて `<feature>` を置き換えてください。
+
+1) Domain（必要な場合）
+   - ファイル: `app/src/domain/entities/<feature>.go`
+   - 内容: Entity 構造体とコンストラクタ（不変条件チェック）
+
+```go
+package entities
+
+type Spot struct {
+  ID       int64
+  Name     string
+  MeshID   string
+}
+
+func NewSpot(name, meshID string) (*Spot, error) {
+  // バリデーション
+  return &Spot{Name: name, MeshID: meshID}, nil
+}
+```
+
+2) Repository インターフェース
+   - ファイル: `app/src/domain/services/<feature>_repository.go` または `app/src/domain/repository/<feature>_repository.go`
+
+```go
+package services
+
+import "context"
+
+type SpotRepository interface {
+  FindByMesh(ctx context.Context, meshID string) (*Spot, error)
+  Create(ctx context.Context, s *Spot) error
+}
+```
+
+3) Usecase（ビジネスロジック）
+   - ファイル: `app/src/usecase/<feature>.go`
+   - 必要要素: `Input`, `Output`, `Presenter` interface, `UseCase` interface, `interactor`, `New...`、`Execute`
+
+```go
+package usecase
+
+import "context"
+
+type RegisterSpotPostInput struct { /* ... */ }
+type RegisterSpotPostOutput struct { Message string }
+
+type RegisterSpotPostPresenter interface { Present(ctx context.Context, out RegisterSpotPostOutput) error }
+type RegisterSpotPostUseCase interface { Execute(ctx context.Context, in RegisterSpotPostInput) (RegisterSpotPostOutput, error) }
+
+type registerSpotPostInteractor struct {
+  repo SpotRepository
+  p    RegisterSpotPostPresenter
+}
+
+func NewRegisterSpotPostInteractor(r SpotRepository, p RegisterSpotPostPresenter) RegisterSpotPostUseCase {
+  return &registerSpotPostInteractor{repo: r, p: p}
+}
+
+func (it *registerSpotPostInteractor) Execute(ctx context.Context, in RegisterSpotPostInput) (RegisterSpotPostOutput, error) {
+  // ロジック
+  return RegisterSpotPostOutput{Message: "ok"}, nil
+}
+```
+
+4) Presenter（Adapter）
+   - ファイル: `app/src/adapter/presenter/<feature>_presenter.go`
+
+```go
+package presenter
+
+import ("net/http" "github.com/labstack/echo/v4")
+
+type HTTPRegisterSpotPostPresenter struct { c echo.Context }
+
+func (p *HTTPRegisterSpotPostPresenter) Present(ctx context.Context, out usecase.RegisterSpotPostOutput) error {
+  return p.c.JSON(http.StatusOK, out)
+}
+```
+
+5) Controller（Adapter）
+   - ファイル: `app/src/adapter/controller/<feature>_controller.go`
+
+```go
+package controller
+
+import ("net/http" "github.com/labstack/echo/v4")
+
+func RegisterSpotPostController(u usecase.RegisterSpotPostUseCase) echo.HandlerFunc {
+  return func(c echo.Context) error {
+    var req usecase.RegisterSpotPostInput
+    if err := c.Bind(&req); err != nil {
+      return c.JSON(http.StatusBadRequest, map[string]string{"error":"Invalid request body"})
+    }
+    out, err := u.Execute(c.Request().Context(), req)
+    if err != nil {
+      return c.JSON(http.StatusInternalServerError, map[string]string{"error":err.Error()})
+    }
+    return c.JSON(http.StatusOK, out)
   }
 }
 ```
 
-Error:
-- 401: 認証不備/認証失敗
-- 400: 緯度経度パラメータ不備/形式不正
-- 404: `{"message":"No recommendation found in your resonance circle"}`
+6) Infrastructure - Repository 実装
+   - ファイル: `app/src/infrastructure/database/postgres/<feature>_repository.go`
 
-### 4.5 GET /v1/users/me/spots
+```go
+package postgres
 
-Header:
-- `Authorization: Bearer <token>`
+import ("context" "database/sql")
 
-Response 200（概形）:
+type spotRepository struct { db *sql.DB }
 
-```json
-{
-  "user_spots": [
-    {
-      "spot": {
-        "id": 1,
-        "name": "string",
-        "mesh_id": "string",
-        "location": {
-          "latitude": 35.0,
-          "longitude": 139.0
-        }
-      },
-      "post": {
-        "id": 10,
-        "user_name": "string",
-        "image_url": "string or null",
-        "caption": "string",
-        "posted_at": "RFC3339"
-      }
-    }
-  ]
+func NewSpotRepository(db *sql.DB) SpotRepository { return &spotRepository{db: db} }
+
+func (r *spotRepository) FindByMesh(ctx context.Context, meshID string) (*entities.Spot, error) {
+  // SQL 実装
+  return nil, nil
 }
 ```
 
-Error:
-- 401: `{"error":"Missing or invalid authorization header"}` または認証エラー
+7) Router 接続
+   - ファイル: `app/src/infrastructure/router/echo.go` にルート登録を追加
+
+```go
+e.POST("/v1/mesh/spots", controller.RegisterSpotPostController(interactor))
+```
+
+8) テスト（Usecase）
+   - ファイル: `app/src/usecase/<feature>_test.go`
+   - テンプレート: `testify` を使ったモックと正常/異常ケース
+
+```go
+package usecase_test
+
+import ("testing" "github.com/stretchr/testify/assert")
+
+func TestRegisterSpotPost_Success(t *testing.T) {
+  // モックを用意して Execute を呼ぶ
+  assert.True(t, true)
+}
+```
+
+9) テスト実行コマンド
+
+```bash
+cd app
+go test -v ./src/usecase/...
+```
 
 ---
 
-## 5. RegisterSpotPost の業務ルール（固定）
-
-このユースケースは分岐が複雑なため、以下を固定仕様とする。
-
-1. `mesh_id` を座標から計算する。
-2. ユーザー自身の同一メッシュ投稿を検索する。
-3. `overwrite=false` かつ同一メッシュ投稿あり:
-- 新規投稿を作らず、既存 Spot 情報とユーザー最新 Post を返す。
-4. `overwrite=true`:
-- 入力座標の Spot を再解決（なければ作成）。
-- その Spot 上の「自分の既存投稿」を削除。
-- 新規投稿を 1 件だけ作成。
-5. ユーザー自身の同一メッシュ投稿なし:
-- 同一座標 Spot があれば合流。
-- なければ Spot 新規作成後に投稿。
-
-注意:
-- `has_existing_info` は既存情報の有無を正しく反映する。
-- `posted_at` は RFC3339 文字列として返す。
+この節は「テンプレート」かつ最小実装例です。実装の際はエラーハンドリング、ログ、トランザクション、入力バリデーション、権限チェック、タイムアウト制御（context）を必ず追加してください。
 
 ---
 
-## 6. DB 仕様（固定）
+## 8. 補足 — `reso` 実装について
 
-`app/migrations/001_init.sql` を正とする。
-
-主要テーブル:
-- `users`
-- `spots`
-- `posts`
-
-固定ポイント:
-- PostGIS 拡張を利用する。
-- `spots.location` は `GEOGRAPHY(POINT,4326)`。
-- 同一座標一意制約（`ST_X`, `ST_Y`）を維持する。
-- `posts.image_url` は NULL 許容。
+- このリポジトリに含まれる `reso`（Reso_backend）は本ガイドの「具体例」として参照できます。実装パターンやテストの書き方、ディレクトリ構成の例として活用して構いません。
+- ただし、`reso` 固有の命名や API 契約は他プロジェクトにそのまま適用するべきではなく、プロジェクト要件に合わせて方針を決めてください。
 
 ---
 
-## 7. 新規 API 追加手順（必須ワークフロー）
-
-AI は以下の順序で実装すること。
-
-1. Domain 変更の要否確認
-- 新しい Entity/VO/Repository method が必要かだけ判断
-- 不要なら Domain は触らない
-
-2. Usecase 作成
-- `app/src/usecase/<feature>.go`
-- Input/Output/Presenter interface/UseCase interface/Interactor/Execute を作成
-
-3. Presenter 作成
-- `app/src/adapter/presenter/<feature>_presenter.go`
-- Usecase Output へ正規化
-
-4. Controller 作成
-- `app/src/adapter/controller/<feature>_controller.go`
-- HTTP 入力を Usecase Input へ変換
-
-5. Infrastructure 実装
-- 必要時のみ `postgres/*_repository.go` と `domain_impl/services/*` を実装/拡張
-
-6. Router 接続
-- `app/src/infrastructure/router/echo.go` に DI と route を追加
-
-7. テスト作成
+必要ならこのテンプレートを基に、あなたのプロジェクト用にカスタマイズした `DEVELOPMENT_GUIDELINES.md` を作成します。どの部分を固定にして、どの部分を可変にしたいか指示してください。
 - `app/src/usecase/<feature>_test.go` を作成/更新
 - 正常系/異常系を最低 1 件ずつ追加
 
